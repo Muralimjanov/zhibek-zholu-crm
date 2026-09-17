@@ -244,6 +244,43 @@ describe('Sales — real PostgreSQL', () => {
       return res.body as { id: string };
     }
 
+    it('direct contract: managerId rule per role (director required, head of sales optional within team, manager self only)', async () => {
+      const body = (managerId?: string) => ({
+        fullName: 'Асанов Бакыт',
+        passportNumber: 'ID 1234567',
+        phone: '+996 555 12-34-56',
+        address: 'г. Ош, ул. Ленина 1',
+        areaSqm: '10',
+        pricePerSqmTyiyn: '100',
+        ...BUYER_CONSENT,
+        ...(managerId ? { managerId } : {}),
+      });
+      const post = (session: Session, managerId?: string) => http().post(`${API}/contracts`).set(...bearer(session)).send(body(managerId));
+
+      // Director: required, any active seller.
+      const dirMissing = await post(s.director);
+      expect([dirMissing.status, dirMissing.body.message]).toEqual([400, 'MANAGER_ID_REQUIRED']);
+      expect((await post(s.director, smB.id)).body.managerId).toBe(smB.id);
+      expect((await post(s.director, hosA.id)).body.managerId).toBe(hosA.id);
+      expect((await post(s.director, accountant.id)).body.message).toBe('MANAGER_INVALID');
+
+      // Head of sales: defaults to self; own team allowed; another team forbidden.
+      expect((await post(s.hosA)).body.managerId).toBe(hosA.id);
+      expect((await post(s.hosA, smA2.id)).body.managerId).toBe(smA2.id);
+      expect((await post(s.hosA, smB.id)).status).toBe(403);
+
+      // Sales manager: always self; own id accepted, anyone else forbidden.
+      expect((await post(s.smA1)).body.managerId).toBe(smA1.id);
+      expect((await post(s.smA1, smA1.id)).body.managerId).toBe(smA1.id);
+      expect((await post(s.smA1, smA2.id)).status).toBe(403);
+
+      // Swagger documents the rule on the field.
+      const doc = await http().get(`${API}/docs-json`);
+      const schema = doc.body.components.schemas.CreateContractDto;
+      expect(schema.properties.managerId.description).toContain('MANAGER_ID_REQUIRED');
+      expect(schema.required ?? []).not.toContain('managerId');
+    });
+
     it('amounts are always computed server-side; client totals are rejected; overflow is a 400', async () => {
       const contract = await createContract(s.smA1, { depositPercent: '25' });
       const row = await prisma.contract.findUniqueOrThrow({ where: { id: contract.id } });

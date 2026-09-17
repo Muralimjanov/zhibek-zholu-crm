@@ -1,4 +1,5 @@
-import { IntersectionType } from '@nestjs/swagger';
+import { ApiPropertyOptional, IntersectionType } from '@nestjs/swagger';
+import { MANAGER_ID_CREATE_DESCRIPTION, MANAGER_ID_UPDATE_DESCRIPTION } from './manager-assignment';
 import { ContractStatus } from '@prisma/client';
 import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { PaginationQueryDto } from '../common/dto/pagination.dto';
@@ -29,6 +30,7 @@ export class CreateContractDto extends IntersectionType(BuyerContactFieldsDto, B
   @MaxLength(500)
   address!: string;
 
+  @ApiPropertyOptional({ format: 'uuid', description: MANAGER_ID_CREATE_DESCRIPTION })
   @IsOptional()
   @IsUUID()
   managerId?: string;
@@ -82,6 +84,7 @@ export class UpdateContractDto {
   @Matches(DECIMAL2_PATTERN)
   depositPercent?: string;
 
+  @ApiPropertyOptional({ format: 'uuid', description: MANAGER_ID_UPDATE_DESCRIPTION })
   @IsOptional()
   @IsUUID()
   managerId?: string;

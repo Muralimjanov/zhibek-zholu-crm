@@ -17,7 +17,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { RequireEmailCode } from '../email-codes/require-email-code.decorator';
 import { UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
@@ -37,6 +37,13 @@ const SELLERS = [UserRole.director, UserRole.head_of_sales, UserRole.sales_manag
 export class ContractsController {
   constructor(private readonly contracts: ContractsService) {}
 
+  @ApiOperation({
+    summary: 'Создать договор напрямую (director, head_of_sales, sales_manager)',
+    description: 'managerId: director - обязателен; head_of_sales - необязателен (по умолчанию он сам, допустим свой менеджер); sales_manager - не передавать. Подробно - в описании поля managerId.',
+  })
+  @ApiResponse({ status: 201, description: 'Договор создан; суммы рассчитаны сервером' })
+  @ApiResponse({ status: 400, description: 'Валидация; MANAGER_ID_REQUIRED (director без managerId); MANAGER_INVALID (не активный продавец)' })
+  @ApiResponse({ status: 403, description: 'AUTH_FORBIDDEN: роль без права или managerId вне допустимых (см. описание поля managerId); CONSENT_REQUIRED' })
   @Roles(...SELLERS)
   @Post()
   create(@CurrentUser() actor: AuthenticatedUser, @Body() dto: CreateContractDto, @Req() req: Request) {
@@ -56,6 +63,12 @@ export class ContractsController {
     return this.contracts.get(actor, id, ctxOf(req));
   }
 
+  @ApiOperation({ summary: 'Изменить договор; managerId - передача другому менеджеру (не для sales_manager)' })
+  @ApiResponse({ status: 400, description: 'Валидация; MANAGER_ID_REQUIRED (director без managerId); MANAGER_INVALID (не активный продавец)' })
+  @ApiResponse({
+    status: 403,
+    description: 'AUTH_FORBIDDEN: роль без права или managerId вне допустимых (см. описание поля managerId); CONTRACT_SIGNED_READ_ONLY: менеджер правит подписанный договор; CONSENT_REQUIRED',
+  })
   @Roles(...SELLERS)
   @Patch(':id')
   update(

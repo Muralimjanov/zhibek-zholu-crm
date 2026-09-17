@@ -1,4 +1,5 @@
-import { IntersectionType, PickType } from '@nestjs/swagger';
+import { ApiPropertyOptional, IntersectionType, PickType } from '@nestjs/swagger';
+import { MANAGER_ID_CREATE_DESCRIPTION, MANAGER_ID_UPDATE_DESCRIPTION } from './manager-assignment';
 import { BookingStatus } from '@prisma/client';
 import { IsEmail, IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { PaginationQueryDto } from '../common/dto/pagination.dto';
@@ -11,7 +12,7 @@ export class CreateBookingDto extends IntersectionType(BuyerContactFieldsDto, Bu
   @Matches(DECIMAL2_PATTERN, { message: 'desiredAreaSqm must be a positive decimal with up to 2 places' })
   desiredAreaSqm!: string;
 
-  /** Ignored for sales managers (always themselves); required for directors. */
+  @ApiPropertyOptional({ format: 'uuid', description: MANAGER_ID_CREATE_DESCRIPTION })
   @IsOptional()
   @IsUUID()
   managerId?: string;
@@ -51,7 +52,7 @@ export class UpdateBookingDto {
   @IsIn([BookingStatus.active, BookingStatus.cancelled])
   status?: BookingStatus;
 
-  /** Reassignment: head of sales (within team) and director only. */
+  @ApiPropertyOptional({ format: 'uuid', description: MANAGER_ID_UPDATE_DESCRIPTION })
   @IsOptional()
   @IsUUID()
   managerId?: string;

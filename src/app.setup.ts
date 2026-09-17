@@ -89,7 +89,15 @@ function setupSwagger(app: INestApplication, config: AppConfigService): void {
           'Refresh/logout use the HttpOnly refresh cookie plus the `x-csrf-token` header. ' +
           'Money values are strings in tyiyn (1 KGS = 100 tyiyn).',
       )
-      .setVersion('0.2.0')
+      .setVersion('0.3.0')
+      .addTag(
+        'accounting',
+        'Приходы и расходы. Бэкенд НЕ создаёт операции автоматически: отметка взноса по договору и подтверждение зарплаты ' +
+          'не порождают записей sale_deposit / payroll. Их вносит бухгалтер вручную, двойного учёта не будет (OPEN_QUESTIONS B10). ' +
+          'Права: создание, изменение и вложения — только бухгалтер (свои записи, месяц не закрыт); чтение и удаление — бухгалтер и директор; ' +
+          'директор не создаёт и не правит операции. Начальник продаж и менеджер доступа не имеют; инвестор видит только агрегаты в GET /dashboard.',
+      )
+      .addTag('email-codes', 'Коды подтверждения важных действий. Код одноразовый, живёт 10 минут, привязан к пользователю, действию и записи.')
       .addBearerAuth()
       .build(),
   );

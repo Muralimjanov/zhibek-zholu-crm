@@ -130,6 +130,32 @@ describe('Email codes and backups — real PostgreSQL + Mailpit', () => {
       expect(res.body.message).toBe('AUTH_EMAIL_NOT_CONFIGURED');
     });
 
+    it('failed email delivery does not use up the code limit (no lockout during a mail outage)', async () => {
+      const user = await seedUser(prisma, { role: UserRole.director });
+      process.env.EMAIL_CODE_MAX_PER_15_MIN = '3';
+      process.env.EMAIL_TRANSPORT = 'brevo';
+      const key = process.env.BREVO_API_KEY;
+      delete process.env.BREVO_API_KEY; // every send fails
+      try {
+        for (let i = 0; i < 5; i++) {
+          const res = await startLogin(app, user.username);
+          expect({ i, status: res.status, message: res.body.message }).toEqual({ i, status: 503, message: 'EMAIL_DELIVERY_FAILED' });
+        }
+        expect(await prisma.emailCode.count({ where: { userId: user.id } })).toBe(0);
+        expect(await prisma.auditEvent.count({ where: { action: 'EMAIL_CODE_DELIVERY_FAILED', actorUserId: user.id } })).toBe(5);
+      } finally {
+        process.env.EMAIL_TRANSPORT = 'smtp';
+        if (key) process.env.BREVO_API_KEY = key;
+      }
+      // Mail is back: login works immediately, and the limit still applies to delivered codes.
+      await loginResponse(app, user.username);
+      await startLogin(app, user.username);
+      await startLogin(app, user.username);
+      const limited = await startLogin(app, user.username);
+      expect(limited.status).toBe(429);
+      process.env.EMAIL_CODE_MAX_PER_15_MIN = '1000';
+    });
+
     it('a disabled account gets the generic error at step 2 as well', async () => {
       const user = await seedUser(prisma, { role: UserRole.sales_manager });
       const first = await startLogin(app, user.username);

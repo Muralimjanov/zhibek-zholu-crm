@@ -125,7 +125,10 @@ export class EmailCodesService {
       await this.email.send({ to: [to], ...this.message(purpose, action, code, record) });
     } catch (err) {
       this.logger.warn(`Email code ${record.id} (${purpose}) not delivered: ${(err as Error).message}`);
-      await this.prisma.emailCode.update({ where: { id: record.id }, data: { invalidatedAt: new Date() } });
+      // An undelivered code is useless and must not count towards the per-user
+      // limit, otherwise a mail outage locks people out for 15 minutes. The
+      // audit event below keeps the trace; login attempts stay IP-throttled.
+      await this.prisma.emailCode.delete({ where: { id: record.id } }).catch(() => undefined);
       await this.audit.record({
         actorUserId: user.id,
         action: AuditAction.EMAIL_CODE_DELIVERY_FAILED,

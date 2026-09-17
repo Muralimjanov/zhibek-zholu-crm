@@ -1,0 +1,505 @@
+// CRM MVP schema (TZ_CRM_DEV_v2): auth foundation + sales, attendance,
+// payroll, accounting and daily reports.
+//
+// Conventions:
+// - Columns ending in `Enc` hold AES-256-GCM ciphertext produced by
+//   FieldCipher ("enc:<ver>:<iv>:<tag>:<ct>"), never plaintext PII.
+// - Columns ending in `Idx` hold HMAC blind indexes for exact-match search.
+// - Money is stored as BigInt in tyiyn (1 KGS = 100 tyiyn), never as float.
+// - Extra CHECK constraints live in the migration SQL (Prisma cannot model them).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  director
+  head_of_sales
+  sales_manager
+  accountant
+  investor
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum ConsentPolicyType {
+  privacy_policy
+  terms_of_use
+  cookie_policy
+  personal_data_processing
+}
+
+enum BookingStatus {
+  active
+  converted
+  cancelled
+}
+
+enum ContractStatus {
+  draft
+  deposit_paid
+  signed
+}
+
+enum ShiftStatus {
+  open
+  closed
+  missed
+}
+
+enum PayrollEntryStatus {
+  draft
+  confirmed
+}
+
+enum TransactionType {
+  income
+  expense
+}
+
+enum TransactionCategory {
+  sale_deposit
+  sale_full_payment
+  sale_installment
+  other_income
+  construction_materials
+  contractor_payment
+  payroll
+  equipment_rent
+  utilities
+  marketing
+  legal_notary
+  taxes_corporate
+  admin_office
+  other_expense
+}
+
+enum DailyReportType {
+  financial
+  sales
+}
+
+enum StoredFilePurpose {
+  avatar
+  contract_document
+  transaction_attachment
+}
+
+enum AuditResult {
+  success
+  failure
+}
+
+enum PendingActionType {
+  create_user
+  disable_user
+}
+
+enum PendingActionStatus {
+  pending
+  confirmed
+  rejected
+  expired
+  failed
+}
+
+// Login identifier: OPEN QUESTION #1 in OPEN_QUESTIONS.md.
+// Working assumption per AUTH_SPEC.md §4: `username`.
+model User {
+  id           String     @id @default(uuid())
+  username     String     @unique
+  passwordHash String
+  // Encrypted PII (FieldCipher contexts User.fullName / User.phone / User.email).
+  fullName     String
+  phone        String?
+  email        String?
+  role         UserRole
+  status       UserStatus @default(active)
+
+  avatarFileId String?     @unique
+  avatarFile   StoredFile? @relation("UserAvatar", fields: [avatarFileId], references: [id], onDelete: SetNull)
+
+  // Sales team membership: a sales_manager belongs to the head_of_sales who
+  // created the account (TZ: "Команда").
+  teamLeadId  String?
+  teamLead    User?   @relation("TeamLead", fields: [teamLeadId], references: [id], onDelete: SetNull)
+  teamMembers User[]  @relation("TeamLead")
+
+  // Metadata (not a source-TЗ field; technical addition for hierarchy/audit
+  // traceability, does not change any business rule).
+  createdById  String?
+  createdBy    User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers User[]  @relation("UserCreatedBy")
+
+  refreshTokens   RefreshToken[]
+  consentRecords  ConsentRecord[]
+  auditEventsById AuditEvent[]    @relation("AuditActor")
+
+  initiatedPendingActions PendingAction[] @relation("PendingActionInitiator")
+  confirmedPendingActions PendingAction[] @relation("PendingActionConfirmedBy")
+  rejectedPendingActions  PendingAction[] @relation("PendingActionRejectedBy")
+
+  bookings        Booking[]      @relation("BookingManager")
+  contracts       Contract[]     @relation("ContractManager")
+  shifts          Shift[]
+  dayOffs         DayOff[]       @relation("DayOffEmployee")
+  approvedDayOffs DayOff[]       @relation("DayOffApprover")
+  payrollEntries  PayrollEntry[] @relation("PayrollEmployee")
+  transactions    Transaction[]  @relation("TransactionCreator")
+  uploadedFiles   StoredFile[]   @relation("FileUploader")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([status])
+  @@index([teamLeadId])
+}
+
+// Refresh token rotation with family tracking for reuse detection.
+// Only the HASH of the raw token is ever stored (AUTH_SPEC.md §7).
+model RefreshToken {
+  id        String @id @default(uuid())
+  familyId  String
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String @unique
+
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  // Set when reuse of an already-rotated token is detected, distinguishing
+  // "normal rotation revoke" from "compromise-triggered revoke".
+  revokedReason String?
+
+  replacedByTokenId String?
+
+  userAgent String?
+  ipAddress String?
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+// Versioned consent records (AUTH_SPEC.md §13 / SECURITY_SPEC.md privacy).
+// Legal wording, required policy set, and legal basis are NOT defined here —
+// see OPEN_QUESTIONS.md #14-26.
+model ConsentRecord {
+  id            String            @id @default(uuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  policyType    ConsentPolicyType
+  policyVersion String
+  acceptedAt    DateTime          @default(now())
+  ip            String?
+  userAgent     String?
+
+  @@index([userId])
+  @@index([policyType, policyVersion])
+}
+
+// Audit foundation. Never store secrets/tokens/hashes/PII bodies here
+// (AUTH_SPEC.md §14, SECURITY_SPEC.md Logging section).
+model AuditEvent {
+  id          String      @id @default(uuid())
+  actorUserId String?
+  actor       User?       @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  action      String
+  entityType  String?
+  entityId    String?
+  result      AuditResult
+  ip          String?
+  userAgent   String?
+  // Redacted/whitelisted metadata only - never raw secrets or PII bodies.
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+  // Incident scoping: "everything that happened to entity X" (SECURITY_SPEC.md).
+  @@index([entityType, entityId])
+}
+
+// Maker-checker step-up confirmation for sensitive identity operations
+// (per explicit product decision: account creation and disabling always
+// require a Director to approve via an emailed one-time code, regardless
+// of who initiated the request - including the Director's own actions).
+//
+// `payload` holds the already-validated, ready-to-execute data for the
+// underlying action (e.g. for create_user: username/fullName/role/
+// passwordHash - NEVER the plaintext password). RBAC and business
+// validation (role-creation matrix, uniqueness, permission to disable)
+// happen at INITIATION time, before a PendingAction is even created, so a
+// forbidden attempt never reaches a Director's inbox.
+model PendingAction {
+  id     String              @id @default(uuid())
+  type   PendingActionType
+  status PendingActionStatus @default(pending)
+
+  initiatorUserId String
+  initiator       User   @relation("PendingActionInitiator", fields: [initiatorUserId], references: [id])
+
+  // Validated, execution-ready payload. Never contains a plaintext
+  // password, refresh token, or the confirmation code itself.
+  payload Json
+
+  // SHA-256 hash of the one-time code. The code itself is never stored or
+  // logged (see audit redaction). Short TTL + limited attempts + strict
+  // per-route rate limiting are the mitigations for the code's
+  // necessarily-lower entropy (it must be human-typeable from an email).
+  codeHash    String
+  attempts    Int    @default(0)
+  maxAttempts Int    @default(5)
+
+  expiresAt DateTime
+
+  confirmedAt       DateTime?
+  confirmedByUserId String?
+  confirmedBy       User?     @relation("PendingActionConfirmedBy", fields: [confirmedByUserId], references: [id])
+
+  rejectedAt       DateTime?
+  rejectedByUserId String?
+  rejectedBy       User?     @relation("PendingActionRejectedBy", fields: [rejectedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([status])
+  @@index([initiatorUserId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Private encrypted file storage (contract documents, receipts, avatars).
+// The bytes live encrypted on disk under FILE_STORAGE_DIR/<storageKey>;
+// they are only ever served through an authorized API endpoint.
+// ---------------------------------------------------------------------------
+model StoredFile {
+  id              String            @id @default(uuid())
+  purpose         StoredFilePurpose
+  storageKey      String            @unique
+  mimeType        String
+  sizeBytes       Int
+  // SHA-256 of the plaintext, for integrity checks after decryption.
+  sha256          String
+  originalNameEnc String?
+  keyVersion      String
+  iv              String
+  authTag         String
+  uploadedById    String
+  uploadedBy      User              @relation("FileUploader", fields: [uploadedById], references: [id])
+  createdAt       DateTime          @default(now())
+
+  avatarOf    User?        @relation("UserAvatar")
+  contract    Contract?
+  transaction Transaction?
+
+  @@index([uploadedById])
+}
+
+// ---------------------------------------------------------------------------
+// Sales
+// ---------------------------------------------------------------------------
+model Booking {
+  id                String        @id @default(uuid())
+  fullNameEnc       String
+  passportNumberEnc String
+  passportNumberIdx String
+  phoneEnc          String
+  phoneIdx          String
+  emailEnc          String?
+  desiredAreaSqm    Decimal       @db.Decimal(12, 2)
+  status            BookingStatus @default(active)
+  managerId         String
+  manager           User          @relation("BookingManager", fields: [managerId], references: [id])
+
+  // The buyer's consent to personal-data processing, confirmed by the
+  // manager against a specific version of the buyer consent form.
+  buyerConsentVersion      String
+  buyerConsentConfirmedAt  DateTime
+  buyerConsentRecordedById String
+
+  contract  Contract?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([managerId])
+  @@index([status])
+  @@index([passportNumberIdx])
+  @@index([phoneIdx])
+  @@index([createdAt])
+}
+
+model Contract {
+  id                 String         @id @default(uuid())
+  bookingId          String?        @unique
+  booking            Booking?       @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  fullNameEnc        String
+  passportNumberEnc  String
+  passportNumberIdx  String
+  addressEnc         String
+  phoneEnc           String
+  phoneIdx           String
+  emailEnc           String?
+  areaSqm            Decimal        @db.Decimal(12, 2)
+  pricePerSqmTyiyn   BigInt
+  totalAmountTyiyn   BigInt
+  depositPercent     Decimal        @default(30) @db.Decimal(5, 2)
+  depositAmountTyiyn BigInt
+  depositPaid        Boolean        @default(false)
+  depositPaidAt      DateTime?
+  depositMarkedById  String?
+  contractFileId     String?        @unique
+  contractFile       StoredFile?    @relation(fields: [contractFileId], references: [id], onDelete: SetNull)
+  status             ContractStatus @default(draft)
+  managerId          String
+  manager            User           @relation("ContractManager", fields: [managerId], references: [id])
+
+  buyerConsentVersion      String
+  buyerConsentConfirmedAt  DateTime
+  buyerConsentRecordedById String
+
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([managerId])
+  @@index([status])
+  @@index([passportNumberIdx])
+  @@index([phoneIdx])
+  @@index([createdAt])
+  @@index([depositPaidAt])
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+model Shift {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  // Business-calendar date (BUSINESS_TIMEZONE), not a UTC timestamp.
+  date      DateTime    @db.Date
+  openedAt  DateTime?
+  closedAt  DateTime?
+  status    ShiftStatus
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  dailyReports DailyReport[]
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([status])
+}
+
+model DayOff {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation("DayOffEmployee", fields: [userId], references: [id])
+  date         DateTime @db.Date
+  approvedById String
+  approvedBy   User     @relation("DayOffApprover", fields: [approvedById], references: [id])
+  reasonEnc    String?
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+// ---------------------------------------------------------------------------
+// Payroll
+// ---------------------------------------------------------------------------
+model PayrollSettings {
+  // Singleton row (id = 1, enforced by CHECK constraint).
+  id                      Int      @id @default(1)
+  finePerMissedShiftTyiyn BigInt
+  taxRatePercent          Decimal  @db.Decimal(5, 2)
+  updatedById             String
+  updatedAt               DateTime @updatedAt
+}
+
+model PayrollEntry {
+  id                      String             @id @default(uuid())
+  userId                  String
+  user                    User               @relation("PayrollEmployee", fields: [userId], references: [id])
+  period                  String // YYYY-MM
+  baseSalaryTyiyn         BigInt
+  missedShiftsCount       Int
+  fineAmountTyiyn         BigInt
+  fineManuallyAdjusted    Boolean            @default(false)
+  taxRatePercent          Decimal            @db.Decimal(5, 2)
+  finePerMissedShiftTyiyn BigInt
+  taxAmountTyiyn          BigInt
+  finalAmountTyiyn        BigInt
+  status                  PayrollEntryStatus @default(draft)
+  confirmedById           String?
+  confirmedAt             DateTime?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  @@unique([userId, period])
+  @@index([period])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Accounting
+// ---------------------------------------------------------------------------
+model Transaction {
+  id                String              @id @default(uuid())
+  type              TransactionType
+  category          TransactionCategory
+  subcategory       String?
+  amountTyiyn       BigInt
+  currency          String              @default("KGS")
+  date              DateTime            @db.Date
+  commentEnc        String?
+  attachmentFileId  String?             @unique
+  attachmentFile    StoredFile?         @relation(fields: [attachmentFileId], references: [id], onDelete: SetNull)
+  relatedContractId String?
+  relatedContract   Contract?           @relation(fields: [relatedContractId], references: [id], onDelete: SetNull)
+  createdById       String
+  createdBy         User                @relation("TransactionCreator", fields: [createdById], references: [id])
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([date])
+  @@index([type, category])
+  @@index([relatedContractId])
+  @@index([createdById])
+}
+
+// A closed month: its transactions are locked against edits.
+model AccountingPeriod {
+  period     String   @id // YYYY-MM
+  closedAt   DateTime @default(now())
+  closedById String
+}
+
+// ---------------------------------------------------------------------------
+// Daily reports
+// ---------------------------------------------------------------------------
+model DailyReport {
+  id            String          @id @default(uuid())
+  type          DailyReportType
+  date          DateTime        @db.Date
+  generatedAt   DateTime        @default(now())
+  // Encrypted JSON: { summary: string (Russian text), data: {...} }.
+  // Sales reports name employees who missed a shift, so the body is PII.
+  contentEnc    String
+  sourceShiftId String?
+  sourceShift   Shift?          @relation(fields: [sourceShiftId], references: [id], onDelete: SetNull)
+
+  @@unique([type, date])
+  @@index([date])
+}

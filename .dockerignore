@@ -1,0 +1,12 @@
+# Never ship secrets, local data or build noise into the image.
+.env
+.env.*
+!.env.example
+node_modules
+dist
+coverage
+storage
+test
+*.log
+.git
+.DS_Store

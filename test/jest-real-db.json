@@ -1,0 +1,18 @@
+{
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "test/real-db.*\\.e2e-spec\\.ts$",
+  "globalSetup": "<rootDir>/test/real-db/global-setup.ts",
+  "setupFiles": [
+    "<rootDir>/test/real-db/env-setup.ts"
+  ],
+  "testTimeout": 30000,
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  }
+}

@@ -1,0 +1,26 @@
+# Local DEVELOPMENT/TEST infrastructure only. Never use in production.
+#
+# Mailpit is a local SMTP catcher: every email the backend sends (e.g.
+# confirmation codes for Directors) lands in this inbox instead of being
+# delivered anywhere. Confirmation codes are intentionally never returned by
+# the API, so this is how you read them during manual testing and in
+# test/real-db.e2e-spec.ts.
+#
+#   docker compose -f docker-compose.dev.yml up -d mailpit
+#   SMTP:   localhost:1025 (no auth, no TLS)
+#   Web UI: http://localhost:8025   (REST API: http://localhost:8025/api/v1)
+#
+# Both ports are bound to 127.0.0.1 only - the inbox contains live
+# confirmation codes and must not be reachable from the network.
+services:
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: uzz-mailpit
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:1025:1025'
+      - '127.0.0.1:8025:8025'
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1

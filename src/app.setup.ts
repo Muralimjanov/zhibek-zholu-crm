@@ -1,3 +1,4 @@
+import { publicKeyFingerprint } from './backups/backup-crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -21,6 +22,15 @@ export function configureApp(app: INestApplication): void {
   void config.jwtAccessSecret;
   void config.refreshCookieSameSite;
   void config.businessTimezone;
+  // Every login needs an emailed code: a deployed server without email
+  // delivery would lock everybody out.
+  if (!config.isLocalEnvironment && !config.isEmailConfigured) {
+    throw new Error(
+      'Email delivery is not configured (EMAIL_TRANSPORT=brevo + BREVO_API_KEY, or SMTP_HOST/SMTP_USER/SMTP_PASS) - login codes cannot be sent',
+    );
+  }
+  const backupKey = config.backupPublicKeyPem;
+  if (backupKey) publicKeyFingerprint(backupKey); // throws on a malformed key
 
   // Only trust X-Forwarded-* when a reverse proxy is explicitly configured;
   // otherwise a client could spoof its IP and bypass per-IP rate limits.

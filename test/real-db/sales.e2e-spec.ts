@@ -19,6 +19,11 @@ const bigintSafe = (_: string, v: unknown) => (typeof v === 'bigint' ? v.toStrin
 const PDF = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n');
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4a70000000049454e44ae426082', 'hex');
 
+
+// Business-rule suite: step-up email codes are covered by email-codes.e2e-spec.ts.
+// Login still goes through the real emailed code.
+process.env.TEST_BYPASS_ACTION_EMAIL_CODE = 'true';
+
 describe('Sales — real PostgreSQL', () => {
   let app: INestApplication;
   let prisma: PrismaClient;

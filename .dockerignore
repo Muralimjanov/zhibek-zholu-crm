@@ -10,3 +10,7 @@ test
 *.log
 .git
 .DS_Store
+backup-keys
+*.uzzbak
+*.pem
+restored-keys*.env

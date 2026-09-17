@@ -20,7 +20,7 @@ export default async function globalSetup(): Promise<void> {
   } catch (err) {
     throw new Error(
       `[real-db] Mailpit is not reachable at ${MAILPIT_API} (${(err as Error).message}). ` +
-        'Start it with: docker compose -f docker-compose.dev.yml up -d mailpit',
+        'Start it: see dev-tools/mailpit/README.md (macOS/Windows service on 127.0.0.1), or docker compose -f docker-compose.dev.yml up -d mailpit',
     );
   }
 }

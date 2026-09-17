@@ -2,7 +2,7 @@
   "name": "uzz-crm-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Auth Foundation for Uluu Zhibek Zholu CRM MVP",
+  "description": "CRM backend for Uluu Zhibek Zholu",
   "license": "UNLICENSED",
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -24,7 +24,10 @@
     "test:e2e:real-db": "jest --config ./test/jest-real-db.json --runInBand",
     "data:encrypt-pii": "ts-node prisma/encrypt-existing-pii.ts",
     "ops:set-director-email": "ts-node prisma/set-director-email.ts",
-    "seed:demo": "ts-node prisma/seed-demo.ts"
+    "backup:keygen": "ts-node prisma/backup-keygen.ts",
+    "backup:agent-token": "ts-node prisma/backup-agent-token.ts",
+    "backup:inspect": "ts-node prisma/backup-inspect.ts",
+    "backup:restore": "ts-node prisma/backup-restore.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

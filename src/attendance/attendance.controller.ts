@@ -13,6 +13,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { RequireEmailCode } from '../email-codes/require-email-code.decorator';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
@@ -58,6 +59,7 @@ export class ShiftsController {
   }
 
   @Roles(UserRole.director)
+  @RequireEmailCode('shift.update')
   @Patch(':id')
   correct(
     @CurrentUser() actor: AuthenticatedUser,
@@ -69,6 +71,7 @@ export class ShiftsController {
   }
 
   @Roles(UserRole.director)
+  @RequireEmailCode('shift.delete')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser() actor: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -106,6 +109,7 @@ export class DayOffsController {
   }
 
   @Roles(UserRole.director, UserRole.head_of_sales)
+  @RequireEmailCode('day_off.delete')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser() actor: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {

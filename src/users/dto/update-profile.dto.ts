@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
 
 // Intentionally has NO `role` field. Role changes go through a separate,
 // more restricted administrative flow if/when the business requires one -
@@ -21,10 +21,6 @@ export class UpdateProfileDto {
   @Matches(/^\+?[0-9 ()-]{5,32}$/, { message: 'phone may contain digits, spaces, + ( ) - only' })
   phone?: string | null;
 
-  /** null clears the email. */
-  @ValidateIf((_, v) => v !== null)
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(254)
-  email?: string | null;
+  // No `email`: it can only be changed via POST /users/me/email (codes to the
+  // current AND the new address) - login codes depend on it.
 }

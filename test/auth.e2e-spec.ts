@@ -170,6 +170,11 @@ function buildFakePrisma() {
         return { count: 1 };
       }),
     },
+    // UsersService serialises identity writes with a transaction-scoped advisory lock.
+    $queryRawUnsafe: jest.fn(async () => []),
+    async $transaction(fn: (tx: unknown) => Promise<unknown>) {
+      return fn(this);
+    },
   };
 }
 
@@ -292,6 +297,7 @@ describe('Auth Foundation (e2e, Prisma + Email mocked)', () => {
       .set('Authorization', `Bearer ${loginRes.body.accessToken}`)
       .send({
         username: 'shouldnotexist',
+        email: 'shouldnotexist@example.com',
         password: 'AnotherStrongPassword1',
         fullName: 'Nope',
         role: 'sales_manager',
@@ -324,6 +330,7 @@ describe('Auth Foundation (e2e, Prisma + Email mocked)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         username: 'newheadofsales',
+        email: 'newheadofsales@example.com',
         password: 'AnotherStrongPassword1',
         fullName: 'New HoS',
         role: 'head_of_sales',
@@ -386,6 +393,7 @@ describe('Auth Foundation (e2e, Prisma + Email mocked)', () => {
       .set('Authorization', `Bearer ${directorLogin.body.accessToken}`)
       .send({
         username: 'blockedaccount',
+        email: 'blockedaccount@example.com',
         password: 'AnotherStrongPassword1',
         fullName: 'Blocked',
         role: 'accountant',
@@ -425,6 +433,7 @@ describe('Auth Foundation (e2e, Prisma + Email mocked)', () => {
       .set('Authorization', `Bearer ${loginRes.body.accessToken}`)
       .send({
         username: 'pendinglistuser',
+        email: 'pendinglistuser@example.com',
         password: 'AnotherStrongPassword1',
         fullName: 'Pending List',
         role: 'accountant',

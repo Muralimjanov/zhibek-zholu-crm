@@ -6,6 +6,7 @@ export interface UserResponseSource {
   fullName: string;
   phone: string | null;
   email: string | null;
+  emailVerified: boolean;
   hasAvatar: boolean;
   role: UserRole;
   status: UserStatus;
@@ -25,6 +26,8 @@ export class UserResponseDto {
   fullName!: string;
   phone!: string | null;
   email!: string | null;
+  /** True once the user received a code at this address (login or email change). */
+  emailVerified!: boolean;
   /** API path (relative to the API prefix) of the avatar, or null. */
   avatarUrl!: string | null;
   role!: UserRole;
@@ -39,6 +42,7 @@ export class UserResponseDto {
       fullName: source.fullName,
       phone: source.phone,
       email: source.email,
+      emailVerified: source.emailVerified,
       avatarUrl: source.hasAvatar ? `users/${source.id}/avatar` : null,
       role: source.role,
       status: source.status,

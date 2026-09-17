@@ -30,7 +30,7 @@ COPY --from=build --chown=node:node /app/prisma ./prisma
 RUN mkdir -p /app/storage && chown node:node /app/storage && chmod 700 /app/storage
 USER node
 EXPOSE 3000
-# 1) apply committed migrations (never reset), 2) optional demo data (staging
-# only, guarded by DEMO_SEED + NODE_ENV), 3) start the API.
+# 1) apply committed migrations (never reset), 2) create the first Director
+# from SEED_DIRECTOR_* only if the database has no users at all, 3) start.
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed-demo.js && node dist/src/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed.js && node dist/src/main.js"]

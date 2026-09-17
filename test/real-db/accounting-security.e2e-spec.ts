@@ -22,6 +22,11 @@ function binaryParser(res: NodeJS.ReadableStream & { setEncoding(e: string): voi
   res.on('end', () => cb(null, Buffer.concat(chunks)));
 }
 
+
+// Business-rule suite: step-up email codes are covered by email-codes.e2e-spec.ts.
+// Login still goes through the real emailed code.
+process.env.TEST_BYPASS_ACTION_EMAIL_CODE = 'true';
+
 describe('Accounting, dashboard and security — real PostgreSQL', () => {
   let app: INestApplication;
   let prisma: PrismaClient;

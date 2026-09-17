@@ -25,10 +25,10 @@ export class CreateUserDto {
   @MaxLength(32)
   phone?: string;
 
-  @IsOptional()
+  /** Required: login codes are sent here, so it must be a real, working mailbox. */
   @IsEmail()
   @MaxLength(254)
-  email?: string;
+  email!: string;
 
   // Requested role is validated against the caller's role server-side in
   // UsersService - never trusted directly (AUTH_SPEC.md §9).

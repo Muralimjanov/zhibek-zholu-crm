@@ -3,3 +3,9 @@ dist/
 coverage/
 .env
 storage/
+
+# Backups: private keys, downloaded copies and restored key files never go to git
+backup-keys/
+*.uzzbak
+restored-keys*.env
+*.pem

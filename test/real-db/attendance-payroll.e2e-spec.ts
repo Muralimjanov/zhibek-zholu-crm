@@ -15,6 +15,11 @@ assertConnectedToTestDatabase();
 
 const LONG_AGO = new Date('2025-01-01T00:00:00Z');
 
+
+// Business-rule suite: step-up email codes are covered by email-codes.e2e-spec.ts.
+// Login still goes through the real emailed code.
+process.env.TEST_BYPASS_ACTION_EMAIL_CODE = 'true';
+
 describe('Attendance, reports and payroll — real PostgreSQL', () => {
   let app: INestApplication;
   let prisma: PrismaClient;

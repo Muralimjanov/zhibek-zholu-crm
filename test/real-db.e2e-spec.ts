@@ -22,6 +22,7 @@ import {
   cookiesFrom,
   createApp,
   login,
+  loginResponse,
   refreshWith,
   seedUser,
   sessionFrom,
@@ -64,7 +65,7 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
     const res = await http()
       .post(`${API}/confirmations/users`)
       .set(...bearer(initiator))
-      .send({ username, password: PASSWORD, fullName: 'New Person', role });
+      .send({ username, password: PASSWORD, fullName: 'New Person', email: `${username.toLowerCase()}@created.test`, role });
     expect(res.status).toBe(202);
     const [message] = await waitForMessages(res.body.pendingActionId);
     return { res, username, pendingActionId: res.body.pendingActionId as string, code: extractCode(message.Text), message };
@@ -81,7 +82,8 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
   describe('Auth', () => {
     it('login success: access token + HttpOnly refresh cookie; DB stores only the token hash', async () => {
       const user = await seedUser(prisma, { role: UserRole.accountant });
-      const res = await http().post(`${API}/auth/login`).send({ username: user.username, password: PASSWORD });
+      // Password step + emailed code (harness reads it from Mailpit).
+      const res = await loginResponse(app, user.username);
 
       expect(res.status).toBe(201);
       expect(res.body.accessToken).toEqual(expect.any(String));
@@ -233,7 +235,7 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
       process.env.JWT_ACCESS_TTL_SECONDS = '1';
       let session: Session;
       try {
-        const res = await http().post(`${API}/auth/login`).send({ username: user.username, password: PASSWORD });
+        const res = await loginResponse(app, user.username);
         expect(res.body.expiresIn).toBe(1);
         session = sessionFrom(res);
       } finally {
@@ -254,7 +256,7 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
       const me = await http().get(`${API}/auth/me`).set(...bearer(session));
       expect(me.status).toBe(200);
       expect(Object.keys(me.body).sort()).toEqual(
-        ['avatarUrl', 'createdAt', 'email', 'fullName', 'id', 'phone', 'role', 'status', 'teamLeadId', 'username'].sort(),
+        ['avatarUrl', 'createdAt', 'email', 'emailVerified', 'fullName', 'id', 'phone', 'role', 'status', 'teamLeadId', 'username'].sort(),
       );
 
       await prisma.user.update({ where: { id: user.id }, data: { status: UserStatus.disabled } });
@@ -274,15 +276,20 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
       const res = await http()
         .patch(`${API}/users/me`)
         .set(...bearer(session))
-        .send({ fullName: 'Renamed', phone: '+996555000111', email: 'me@test.local' });
+        .send({ fullName: 'Renamed', phone: '+996555000111' });
       expect(res.status).toBe(200);
       expect(res.body).not.toHaveProperty('passwordHash');
-      expect(res.body).toMatchObject({ fullName: 'Renamed', phone: '+996555000111', email: 'me@test.local' });
+      const email = `${user.username.toLowerCase()}@users.test`;
+      expect(res.body).toMatchObject({ fullName: 'Renamed', phone: '+996555000111', email });
+
+      // The email (where login codes go) is not editable here - only via the two-code flow.
+      const smuggled = await http().patch(`${API}/users/me`).set(...bearer(session)).send({ email: 'attacker@evil.test' });
+      expect(smuggled.status).toBe(400);
 
       // At rest the PII is ciphertext, bound to its column.
       const row = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
       expect(row.role).toBe(UserRole.sales_manager);
-      for (const [column, plain] of [['fullName', 'Renamed'], ['phone', '+996555000111'], ['email', 'me@test.local']] as const) {
+      for (const [column, plain] of [['fullName', 'Renamed'], ['phone', '+996555000111'], ['email', email]] as const) {
         expect(row[column]).toMatch(/^enc:v1:/);
         expect(row[column]).not.toContain(plain);
         expect(testCipher().decrypt(`User.${column}`, row[column]!)).toBe(plain);
@@ -356,7 +363,7 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
           const res = await http()
             .post(`${API}/confirmations/users`)
             .set(...bearer(session))
-            .send({ username, password: PASSWORD, fullName: 'Matrix', role: targetRole });
+            .send({ username, password: PASSWORD, fullName: 'Matrix', email: `${username.toLowerCase()}@created.test`, role: targetRole });
 
           if (allowed[creatorRole].includes(targetRole)) {
             expect({ creatorRole, targetRole, status: res.status }).toEqual({ creatorRole, targetRole, status: 202 });
@@ -372,7 +379,8 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
 
       expect(allowedIds).toHaveLength(4);
       for (const id of allowedIds) await waitForMessages(id);
-      expect((await totalMessages()) - mailBefore).toBe(allowedIds.length);
+      // One approval email per allowed request + one login code per creator.
+      expect((await totalMessages()) - mailBefore).toBe(allowedIds.length + ALL_ROLES.length);
       for (const username of forbiddenUsernames) {
         expect(await findMessages(username)).toHaveLength(0);
       }

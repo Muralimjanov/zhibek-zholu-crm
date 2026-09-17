@@ -232,6 +232,22 @@ export class AppConfigService {
     return this.config.get<string>('SMTP_FROM') ?? 'CRM Security <no-reply@localhost>';
   }
 
+  /** `smtp` (default) or `brevo` (HTTPS API - works where SMTP ports are blocked, e.g. Render free). */
+  get emailTransport(): 'smtp' | 'brevo' {
+    const v = (this.config.get<string>('EMAIL_TRANSPORT') ?? 'smtp').toLowerCase();
+    if (v !== 'smtp' && v !== 'brevo') throw new Error('EMAIL_TRANSPORT must be smtp or brevo');
+    return v;
+  }
+
+  get brevoApiKey(): string | undefined {
+    return this.config.get<string>('BREVO_API_KEY') || undefined;
+  }
+
+  /** Whether any email transport is usable. Login depends on it. */
+  get isEmailConfigured(): boolean {
+    return this.emailTransport === 'brevo' ? Boolean(this.brevoApiKey) : this.isSmtpConfigured;
+  }
+
   get smtpHasCredentials(): boolean {
     return Boolean(this.smtpUser && this.smtpPass);
   }
@@ -258,5 +274,61 @@ export class AppConfigService {
 
   get confirmationCodeMaxAttempts(): number {
     return Number(this.config.get<string>('CONFIRMATION_CODE_MAX_ATTEMPTS') ?? 5);
+  }
+
+  // --- Email codes for the user themself (login factor, step-up actions) ----
+  get emailCodeTtlSeconds(): number {
+    return Number(this.config.get<string>('EMAIL_CODE_TTL_SECONDS') ?? 600);
+  }
+
+  get emailCodeMaxAttempts(): number {
+    return Number(this.config.get<string>('EMAIL_CODE_MAX_ATTEMPTS') ?? 5);
+  }
+
+  /** Codes one user may request per purpose within 15 minutes (anti mail-bombing). */
+  get emailCodeMaxPer15Min(): number {
+    return Number(this.config.get<string>('EMAIL_CODE_MAX_PER_15_MIN') ?? 5);
+  }
+
+  /**
+   * Test-only escape hatches for suites that do not exercise the email-code
+   * flows. Honoured ONLY when NODE_ENV=test - never in development, staging
+   * or production.
+   */
+  get loginEmailCodeBypassedForTests(): boolean {
+    return this.config.get<string>('NODE_ENV') === 'test' && this.config.get<string>('TEST_BYPASS_LOGIN_EMAIL_CODE') === 'true';
+  }
+
+  get actionEmailCodeBypassedForTests(): boolean {
+    return this.config.get<string>('NODE_ENV') === 'test' && this.config.get<string>('TEST_BYPASS_ACTION_EMAIL_CODE') === 'true';
+  }
+
+  // --- Backups to the Director's computer ------------------------------------
+  /** PEM (or base64 of a PEM) RSA public key; backups are encrypted to it. */
+  get backupPublicKeyPem(): string | undefined {
+    const raw = this.config.get<string>('BACKUP_PUBLIC_KEY');
+    if (!raw) return undefined;
+    return raw.includes('BEGIN PUBLIC KEY') ? raw.replace(/\\n/g, '\n') : Buffer.from(raw, 'base64').toString('utf8');
+  }
+
+  /** SHA-256 (hex) of the backup agent's token. The token itself is never stored server-side. */
+  get backupAgentTokenSha256(): string | undefined {
+    const v = this.config.get<string>('BACKUP_AGENT_TOKEN_SHA256')?.trim().toLowerCase();
+    return v && /^[a-f0-9]{64}$/.test(v) ? v : undefined;
+  }
+
+  /** Directors are emailed when no backup was downloaded for this many hours. */
+  get backupReminderHours(): number {
+    return Number(this.config.get<string>('BACKUP_REMINDER_HOURS') ?? 48);
+  }
+
+  /** Every configured ENCRYPTION_KEY_V<n> (needed to read a restored backup). */
+  get allEncryptionKeys(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (let n = 1; n <= 20; n++) {
+      const value = this.encryptionKeyFor(`v${n}`);
+      if (value) out[`ENCRYPTION_KEY_V${n}`] = value;
+    }
+    return out;
   }
 }

@@ -14,6 +14,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { RequireEmailCode } from '../email-codes/require-email-code.decorator';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
@@ -36,6 +37,7 @@ export class PayrollController {
   }
 
   @Roles(UserRole.accountant)
+  @RequireEmailCode('payroll.settings.update')
   @Put('settings')
   putSettings(@CurrentUser() actor: AuthenticatedUser, @Body() dto: PayrollSettingsDto, @Req() req: Request) {
     return this.payroll.putSettings(actor, dto, ctxOf(req));
@@ -73,6 +75,7 @@ export class PayrollController {
   }
 
   @Roles(UserRole.accountant)
+  @RequireEmailCode('payroll.confirm')
   @Post('entries/:id/confirm')
   @HttpCode(HttpStatus.OK)
   confirm(@CurrentUser() actor: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -80,6 +83,7 @@ export class PayrollController {
   }
 
   @Roles(UserRole.director)
+  @RequireEmailCode('payroll.delete')
   @Delete('entries/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser() actor: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {

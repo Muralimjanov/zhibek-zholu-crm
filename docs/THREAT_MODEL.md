@@ -13,7 +13,8 @@ specific risk and each residual risk is listed explicitly.
 | Contract documents, receipts, avatars | Highly sensitive | `FILE_STORAGE_DIR`, encrypted per file |
 | Employee full name, phone, email | PII | `User` (AES-256-GCM) |
 | Payroll, transactions | Confidential financial | PostgreSQL (plain numbers, access-controlled) |
-| Passwords, refresh tokens, confirmation codes | Authentication secrets | only hashes (Argon2id / SHA-256) |
+| Passwords, refresh tokens, confirmation and email codes | Authentication secrets | only hashes (Argon2id / SHA-256) |
+| Database backups | Full copy of all data + app keys | encrypted to the Director's RSA public key; private key only with the Director |
 | Encryption + blind-index keys | Secrets | environment / secret manager, never in DB or git |
 | Audit log | Security evidence | `AuditEvent` (allowlisted metadata, no PII/secrets) |
 
@@ -21,7 +22,7 @@ specific risk and each residual risk is listed explicitly.
 
 | Threat (SECURITY_SPEC.md) | Controls in code | Verified by |
 |---|---|---|
-| Credential stuffing / brute force | Argon2id; identical 401 for unknown user / wrong password / disabled; per-IP login+refresh limit (`AUTH_THROTTLE_*`); confirm-code 5/min + max attempts | `real-db.e2e-spec.ts` rate-limit tests |
+| Credential stuffing / brute force / stolen password | Password + one-time code emailed to the account (single use, 10 min, 5 attempts, per-user issue limit); Argon2id; identical 401 for unknown user / wrong password / disabled; per-IP login+refresh limit (`AUTH_THROTTLE_*`); confirm-code 5/min + max attempts | `real-db.e2e-spec.ts` rate-limit tests |
 | Account enumeration | same error body and dummy hash on unknown user | real-db auth tests |
 | Stolen refresh token | HttpOnly cookie, SHA-256 at rest, rotation, family revocation on reuse (incl. concurrent reuse) | real-db reuse/concurrency tests |
 | CSRF on cookie auth | double-submit token on `/auth/refresh`, `/auth/logout`; SameSite | real-db CSRF test |
@@ -36,8 +37,9 @@ specific risk and each residual risk is listed explicitly.
 | Spreadsheet formula injection | cells starting with `= + - @ TAB CR` prefixed with `'` in Excel export | export test |
 | Leaked secrets / logs | audit metadata allowlist + forbidden keys; codes/passwords/tokens never logged; errors mapped to stable codes, no stack traces | audit-redaction and stdout tests |
 | Data integrity / fraud | money in BigInt tyiyn; totals computed server-side; DB CHECK constraints (signed ⇒ deposit+file, final = base − fine − tax, category ↔ type, currency KGS); atomic state transitions (booking conversion, confirm, deposit, payroll confirm); closed accounting periods; missed shifts cannot be erased by a head of sales | DB-constraint and concurrency tests |
-| Compromised employee account | status re-checked on every request; disable revokes all sessions; PII views and downloads audited (`PII_ACCESSED`, `FILE_DOWNLOADED`) | disable-flow test |
+| Compromised employee session | important actions (deletes, deposits, transactions, payroll, period close, email/password change, backup download) need a fresh code from the user's mailbox, bound to the exact record; email change needs codes at the old AND new address and notifies the old one; password change ends all sessions; status re-checked on every request; disable revokes all sessions; PII views and downloads audited (`PII_ACCESSED`, `FILE_DOWNLOADED`) | disable-flow test |
 | Reconnaissance | Swagger never mounted in production; `x-powered-by` disabled; Helmet headers | config unit test, headers test |
+| Data loss (DB expiry/deletion, host failure) | scheduled encrypted backups pulled to the Director's computer (agent token compared by SHA-256, audited), manual export with code, 48h reminder email, restore only into an empty DB | `email-codes.e2e-spec.ts` backup/restore test |
 | DoS via large bodies | JSON body limit (`JSON_BODY_LIMIT`), multipart limits, bounded pagination and report ranges | 413 test |
 
 ## Residual risks / required outside this repo
@@ -49,5 +51,7 @@ specific risk and each residual risk is listed explicitly.
 5. **Malware scanning** of uploads is not implemented (OPEN_QUESTIONS #33); PDFs are served only as downloads.
 6. **Rate limits are per process and per IP**; multiple instances or a reverse proxy need a shared store and `TRUST_PROXY` (#41).
 7. **Framework advisories**: `npm audit` still reports a moderate `@nestjs/core` advisory (fixed only in Nest 11+) and a `js-yaml` issue reachable only when *parsing* untrusted YAML, which this app never does. Plan a Nest 11 upgrade.
-8. **No MFA** (#9) and **no password reset / change flow** (#6, #13).
+8. **Email is the second factor**: whoever controls a user's mailbox and password can sign in. No self-service password *reset* (forgotten password) yet — an administrator flow is still open (#6). Email codes are 8 characters (~40 bits); protection relies on TTL, attempt limits and rate limits.
 9. Legal texts are **drafts** with placeholders — they must be completed and approved by a lawyer before production.
+10. **Backups**: whoever holds the private key AND its passphrase can read every backup, including the application keys inside it. Free hosting: the database expires and files are lost on restart — the backup agent is the only copy; restores lose data written after the last copy.
+11. **Step-up codes are bound to the record, not to the request body** (e.g. a code for `transaction.update` of record X allows any valid change of X within 10 minutes).

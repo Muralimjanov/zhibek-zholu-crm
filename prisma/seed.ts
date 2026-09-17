@@ -31,7 +31,7 @@ interface SeedInput {
   username: string;
   password: string;
   fullName: string;
-  email?: string;
+  email: string;
 }
 
 /** Чистая функция без побочных эффектов - легко тестируется. */
@@ -39,32 +39,30 @@ export function shouldSeed(existingUserCount: number): boolean {
   return existingUserCount === 0;
 }
 
-function readRequiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `Не задана переменная окружения ${name}. Задайте SEED_DIRECTOR_USERNAME, ` +
-        `SEED_DIRECTOR_PASSWORD и SEED_DIRECTOR_FULL_NAME перед запуском seed-скрипта.`,
-    );
+const SEED_ENV = ['SEED_DIRECTOR_USERNAME', 'SEED_DIRECTOR_PASSWORD', 'SEED_DIRECTOR_FULL_NAME', 'SEED_DIRECTOR_EMAIL'] as const;
+
+/** null = no variable set at all (nothing to do); throws on a partial/invalid set. */
+export function readSeedInput(env: NodeJS.ProcessEnv): SeedInput | null {
+  const present = SEED_ENV.filter((name) => Boolean(env[name]));
+  if (present.length === 0) return null;
+  const missing = SEED_ENV.filter((name) => !env[name]);
+  if (missing.length > 0) {
+    throw new Error(`Не заданы переменные: ${missing.join(', ')}. Нужны все: ${SEED_ENV.join(', ')}.`);
   }
-  return value;
-}
-
-function readSeedInput(): SeedInput {
-  const username = readRequiredEnv('SEED_DIRECTOR_USERNAME');
-  const password = readRequiredEnv('SEED_DIRECTOR_PASSWORD');
-  const fullName = readRequiredEnv('SEED_DIRECTOR_FULL_NAME');
-  // Optional, but strongly recommended: without an email, this first
-  // Director cannot receive confirmation-code emails for account
-  // creation/disable (they can still approve via
-  // GET /api/v1/confirmations/pending in-app).
-  const email = process.env.SEED_DIRECTOR_EMAIL || undefined;
-
-  if (password.length < 12) {
+  const input = {
+    username: env.SEED_DIRECTOR_USERNAME as string,
+    password: env.SEED_DIRECTOR_PASSWORD as string,
+    fullName: env.SEED_DIRECTOR_FULL_NAME as string,
+    // Обязателен: вход в CRM подтверждается кодом, который приходит на этот email.
+    email: (env.SEED_DIRECTOR_EMAIL as string).trim().toLowerCase(),
+  };
+  if (input.password.length < 12) {
     throw new Error('SEED_DIRECTOR_PASSWORD должен быть не короче 12 символов.');
   }
-
-  return { username, password, fullName, email };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) {
+    throw new Error('SEED_DIRECTOR_EMAIL должен быть настоящим адресом почты.');
+  }
+  return input;
 }
 
 async function main() {
@@ -79,7 +77,15 @@ async function main() {
     return;
   }
 
-  const input = readSeedInput();
+  const input = readSeedInput(process.env);
+  if (!input) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      'База пуста, но SEED_DIRECTOR_* не заданы - первый Director не создан. ' +
+        'Задайте SEED_DIRECTOR_USERNAME, SEED_DIRECTOR_PASSWORD, SEED_DIRECTOR_FULL_NAME, SEED_DIRECTOR_EMAIL и перезапустите.',
+    );
+    return;
+  }
   const passwordHash = await argon2.hash(input.password, { type: argon2.argon2id });
   // ФИО и email - ПД: храним зашифрованными, как UsersService.
   const cipher = new FieldCipher(new EncryptionService(new AppConfigService(new ConfigService())));
@@ -89,23 +95,17 @@ async function main() {
       username: input.username,
       passwordHash,
       fullName: cipher.encrypt(USER_PII.fullName, input.fullName),
-      email: cipher.encryptNullable(USER_PII.email, input.email),
+      email: cipher.encrypt(USER_PII.email, input.email),
       role: 'director',
       status: 'active',
     },
   });
 
-  if (!input.email) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      'Внимание: SEED_DIRECTOR_EMAIL не задан. Этот Director не сможет получать ' +
-        'коды подтверждения по почте, только через GET /api/v1/confirmations/pending.',
-    );
-  }
-
   // Пароль/хэш никогда не логируются - только факт создания и id/username.
   // eslint-disable-next-line no-console
   console.log(`Создан первый Director: id=${director.id} username=${director.username}`);
+  // eslint-disable-next-line no-console
+  console.log('Удалите SEED_DIRECTOR_PASSWORD из настроек сервера и смените пароль после первого входа.');
 }
 
 // Запускать main() только когда файл выполняется напрямую как скрипт

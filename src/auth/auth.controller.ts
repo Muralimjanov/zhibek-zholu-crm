@@ -13,6 +13,7 @@ import { Request, Response } from 'express';
 import { randomBytes } from 'crypto';
 import { AuthService, LoginResult } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { VerifyEmailCodeDto } from '../email-codes/email-codes.dto';
 import { AppConfigService } from '../config/app-config.service';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthThrottle } from '../common/decorators/auth-throttle.decorator';
@@ -84,14 +85,35 @@ export class AuthController {
     }
   }
 
+  /**
+   * Step 1: username + password. Returns `{ mfaRequired: true, challengeId,
+   * expiresAt, emailHint }` and emails a code; no session yet.
+   */
   @Public()
   @AuthThrottle()
   @Post('login')
   async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.login(dto.username, dto.password, {
+    const ctx = { ip: req.ip, userAgent: req.headers['user-agent'] };
+    if (!this.config.loginEmailCodeBypassedForTests) {
+      const challenge = await this.authService.startLogin(dto.username, dto.password, ctx);
+      return { mfaRequired: true, ...challenge };
+    }
+    return this.sessionResponse(res, await this.authService.login(dto.username, dto.password, ctx));
+  }
+
+  /** Step 2: the code from the email. Issues the access token and refresh cookie. */
+  @Public()
+  @AuthThrottle()
+  @Post('login/verify')
+  async verifyLogin(@Body() dto: VerifyEmailCodeDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.verifyLoginCode(dto.challengeId, dto.code, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
+    return this.sessionResponse(res, result);
+  }
+
+  private sessionResponse(res: Response, result: LoginResult) {
     const csrfToken = this.setRefreshCookies(res, result);
     return {
       accessToken: result.accessToken,

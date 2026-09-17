@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { RequireEmailCode } from '../email-codes/require-email-code.decorator';
 import { UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
@@ -36,6 +37,7 @@ export class AccountingController {
   constructor(private readonly accounting: AccountingService) {}
 
   @Roles(UserRole.accountant)
+  @RequireEmailCode('transaction.create')
   @Post('transactions')
   create(@CurrentUser() actor: AuthenticatedUser, @Body() dto: CreateTransactionDto, @Req() req: Request) {
     return this.accounting.create(actor, dto, ctxOf(req));
@@ -54,6 +56,7 @@ export class AccountingController {
   }
 
   @Roles(UserRole.accountant)
+  @RequireEmailCode('transaction.update')
   @Patch('transactions/:id')
   update(
     @CurrentUser() actor: AuthenticatedUser,
@@ -65,6 +68,7 @@ export class AccountingController {
   }
 
   @Roles(UserRole.director, UserRole.accountant)
+  @RequireEmailCode('transaction.delete')
   @Delete('transactions/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser() actor: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -73,6 +77,7 @@ export class AccountingController {
 
   /** Receipt / act scan (PDF, JPEG, PNG). */
   @Roles(UserRole.accountant)
+  @RequireEmailCode('transaction.attachment')
   @Put('transactions/:id/attachment')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
@@ -106,6 +111,7 @@ export class AccountingController {
 
   /** Locks the month's transactions against edits by the accountant. */
   @Roles(UserRole.accountant)
+  @RequireEmailCode('accounting.period.close')
   @Post('accounting/periods/:period/close')
   closePeriod(@CurrentUser() actor: AuthenticatedUser, @Param('period') period: string, @Req() req: Request) {
     return this.accounting.closePeriod(actor, period, ctxOf(req));

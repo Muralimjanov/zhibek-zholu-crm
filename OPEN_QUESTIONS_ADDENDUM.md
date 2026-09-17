@@ -166,3 +166,75 @@ placeholders; Swagger enabled outside production only.
 | Residual risks | Nest 11 upgrade, HTTPS, DB TLS, encrypted backups — see `docs/THREAT_MODEL.md`. | Acknowledged; infrastructure tasks before production. |
 
 B2, B5–B7, B9–B17: no answer yet — defaults above remain in force.
+
+## Update 2026-09-18 — emailed codes, backups, no demo data
+
+Owner decisions (2026-09-18):
+
+| Topic | Decision | Implementation |
+|---|---|---|
+| Login | Code by email on **every** login, all roles | `POST /auth/login` → `POST /auth/login/verify`; `User.emailVerifiedAt` set by the first received code |
+| Important actions | Code to the acting user's own email | `@RequireEmailCode` + `EmailCodeInterceptor`; list in `src/email-codes/email-code-actions.ts`. Account create/disable keep the Director approval |
+| Email | Required, real and unique for every account | `CreateUserDto.email` required; `EMAIL_TAKEN`; change only via codes to the old and the new address |
+| Demo data | Removed | `prisma/seed-demo.ts` deleted; first Director from `SEED_DIRECTOR_*` on an empty DB |
+| Backups | Automatic agent on the Director's computer **and** manual download | `docs/BACKUPS.md`, `backup-agent/` (macOS + Windows) |
+| Hosting | Free Render for now | `render.yaml`; email via Brevo HTTPS API (Render free blocks SMTP ports) |
+
+### Risks accepted with "free Render for now" — please re-confirm before storing important data
+
+- R1. The free PostgreSQL expires (about 30 days): the data survives only through the backups on the Director's computer and a manual restore.
+- R2. Uploaded files vanish on every restart/deploy; only the last backup has them.
+- R3. No database backups on the provider side; data written after the last agent download (13:00 / 19:00) is lost on failure.
+
+### New open questions
+
+| # | Question |
+|---|---|
+| C0 | Which operating system is on the Director's computer (macOS or Windows)? Both agents are ready; installation instructions differ. |
+| C1 | Should the Director be able to change the email of another employee (e.g. a manager lost access to their mailbox)? Today only the user themself can, and a user without mailbox access cannot sign in. |
+| C2 | Forgotten password: who resets it (Director via approval code?) — no reset flow exists yet. |
+| C3 | Should any step-up code be bound to the exact request data (amount etc.), not only to the record? |
+
+### Requested modules outside TZ v2 — specification needed before implementation
+
+TZ v2 lists these as "вне рамок этой версии". The owner asked for them (2026-09-18); nothing is implemented until the business rules below are answered — guessing would put real money and tenants' personal data at risk.
+
+**Аренда (арендаторы и договоры аренды)**
+
+| # | Question |
+|---|---|
+| D1 | What is rented: premises in the same complex? Is there a list of objects/floors/premises (number, area, purpose)? Should sales (Booking/Contract) also be tied to specific premises? |
+| D2 | Tenant: individual and/or company? Required fields (ФИО / название, ИНН, паспорт, телефон, email, банковские реквизиты)? |
+| D3 | Lease contract: rate per m² or fixed, currency, term, security deposit, payment day and frequency, indexation, late fee, early termination. |
+| D4 | Who creates and manages leases (existing role or a new "rental manager")? What do director, accountant and investors see (CRUD table like TZ v2)? |
+| D5 | Rent payments: generated monthly invoices? Link to accounting (new income category `rent`?), debt/overdue report, reminders to tenants? |
+
+**Заявки на обслуживание**
+
+| # | Question |
+|---|---|
+| E1 | Who creates a request: employees only, or tenants themselves (then tenants need accounts/portal)? |
+| E2 | Fields and categories (сантехника, электрика, уборка…), priority, photos. |
+| E3 | Statuses and who executes (new role "technician"/contractor?), deadlines (SLA), cost of work → expense transaction? |
+
+**Кассы и эквайринг**
+
+| # | Question |
+|---|---|
+| F1 | Which cash registers (ККМ/ЭККМ, provider and model) and which acquiring bank? Do they provide an API, and do you have documentation/test access? |
+| F2 | What should happen: payments from the register/bank automatically create income transactions? Fiscal receipts issued from the CRM? |
+
+**1С**
+
+| # | Question |
+|---|---|
+| G1 | Which 1С configuration and version (e.g. «Бухгалтерия для Кыргызстана»), hosted where? |
+| G2 | Direction and data: CRM → 1С (transactions, contracts, payroll) and/or 1С → CRM? How often, and which system is the source of truth? |
+| G3 | Exchange method available on the 1С side: file upload (XML/Excel), HTTP service, or OData? Who on the 1С side can configure it? |
+
+**Push-уведомления в мессенджеры**
+
+| # | Question |
+|---|---|
+| H1 | Which messenger: Telegram (free bot) or WhatsApp (paid Business API via Meta, needs a verified business)? |
+| H2 | Which events and to whom (daily reports to Director/investors, missed shifts, large transactions, failed backups…)? Note: messages leave the CRM — personal data should not be included. |

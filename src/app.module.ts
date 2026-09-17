@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
 import { AppConfigService } from './config/app-config.service';
@@ -26,6 +26,9 @@ import { AccountingModule } from './accounting/accounting.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './health/health.module';
+import { EmailCodesModule } from './email-codes/email-codes.module';
+import { EmailCodeInterceptor } from './email-codes/email-code.interceptor';
+import { BackupsModule } from './backups/backups.module';
 
 @Module({
   imports: [
@@ -52,6 +55,7 @@ import { HealthModule } from './health/health.module';
     AuditModule,
     NotificationsModule,
     UsersModule,
+    EmailCodesModule,
     AuthModule,
     ConsentModule,
     ConfirmationsModule,
@@ -64,6 +68,7 @@ import { HealthModule } from './health/health.module';
     AccountingModule,
     DashboardModule,
     HealthModule,
+    BackupsModule,
   ],
   providers: [
     // Every route requires authentication by default (opt-out via @Public()).
@@ -74,6 +79,9 @@ import { HealthModule } from './health/health.module';
     { provide: APP_GUARD, useClass: RolesGuard },
     // Global rate limiting (per-route stricter limits applied via @Throttle()).
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Step-up email codes for important actions (@RequireEmailCode), checked
+    // after all guards so unauthorised requests never consume a code.
+    { provide: APP_INTERCEPTOR, useClass: EmailCodeInterceptor },
   ],
 })
 export class AppModule {}

@@ -103,6 +103,12 @@ enum PendingActionType {
   disable_user
 }
 
+enum EmailCodePurpose {
+  login
+  action
+  email_change
+}
+
 enum PendingActionStatus {
   pending
   confirmed
@@ -114,15 +120,18 @@ enum PendingActionStatus {
 // Login identifier: OPEN QUESTION #1 in OPEN_QUESTIONS.md.
 // Working assumption per AUTH_SPEC.md §4: `username`.
 model User {
-  id           String     @id @default(uuid())
-  username     String     @unique
-  passwordHash String
+  id              String     @id @default(uuid())
+  username        String     @unique
+  passwordHash    String
   // Encrypted PII (FieldCipher contexts User.fullName / User.phone / User.email).
-  fullName     String
-  phone        String?
-  email        String?
-  role         UserRole
-  status       UserStatus @default(active)
+  fullName        String
+  phone           String?
+  email           String?
+  role            UserRole
+  status          UserStatus @default(active)
+  // Set when the user first proves they receive mail at `email` (login code
+  // or email-change code). Cleared never; replaced on email change.
+  emailVerifiedAt DateTime?
 
   avatarFileId String?     @unique
   avatarFile   StoredFile? @relation("UserAvatar", fields: [avatarFileId], references: [id], onDelete: SetNull)
@@ -155,6 +164,7 @@ model User {
   payrollEntries  PayrollEntry[] @relation("PayrollEmployee")
   transactions    Transaction[]  @relation("TransactionCreator")
   uploadedFiles   StoredFile[]   @relation("FileUploader")
+  emailCodes      EmailCode[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -275,6 +285,35 @@ model PendingAction {
 
   @@index([status])
   @@index([initiatorUserId])
+  @@index([expiresAt])
+}
+
+// One-time codes emailed to the user themself: second login factor, step-up
+// confirmation of important actions, and proof of ownership of a new email.
+// Only a hash of the code is stored; a code is bound to its user, purpose,
+// action and resource, and can be consumed once.
+model EmailCode {
+  id            String           @id @default(uuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose       EmailCodePurpose
+  // Step-up action key (e.g. "booking.delete") for purpose=action.
+  action        String?
+  // Route resource the code is valid for (record id / period), if any.
+  resourceId    String?
+  // purpose=email_change: the new address (FieldCipher context EmailCode.newEmail).
+  newEmailEnc   String?
+  codeHash      String
+  attempts      Int              @default(0)
+  maxAttempts   Int
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  // Superseded by a newer code or undeliverable.
+  invalidatedAt DateTime?
+  ip            String?
+  createdAt     DateTime         @default(now())
+
+  @@index([userId, purpose, createdAt])
   @@index([expiresAt])
 }
 

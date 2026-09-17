@@ -48,6 +48,11 @@ export class EmailService {
   }
 
   async send(input: SendEmailInput): Promise<void> {
+    if (this.config.emailTransport === 'brevo') {
+      await this.sendViaBrevo(input);
+      this.logger.log(`Email sent: "${input.subject}" to ${input.to.length} recipient(s)`);
+      return;
+    }
     const transporter = this.getTransporter();
     await transporter.sendMail({
       from: this.config.smtpFrom,
@@ -57,4 +62,37 @@ export class EmailService {
     });
     this.logger.log(`Email sent: "${input.subject}" to ${input.to.length} recipient(s)`);
   }
+
+  /**
+   * Brevo transactional email over HTTPS (port 443). Hosts such as Render's
+   * free tier block outbound SMTP ports 25/465/587.
+   */
+  private async sendViaBrevo(input: SendEmailInput): Promise<void> {
+    const apiKey = this.config.brevoApiKey;
+    if (!apiKey) throw new Error('EMAIL_TRANSPORT=brevo but BREVO_API_KEY is not set');
+    const sender = parseAddress(this.config.smtpFrom);
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': apiKey, 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({
+        sender,
+        to: input.to.map((email) => ({ email })),
+        subject: input.subject,
+        textContent: input.text,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      // The response body may echo recipient addresses - log the status only.
+      throw new Error(`Brevo API responded with HTTP ${res.status}`);
+    }
+  }
+}
+
+/** "Name <email@x>" or "email@x" -> { name?, email }. */
+export function parseAddress(value: string): { name?: string; email: string } {
+  const match = value.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  if (!match) return { email: value.trim() };
+  const name = match[1].replace(/^"|"$/g, '').trim();
+  return name ? { name, email: match[2].trim() } : { email: match[2].trim() };
 }

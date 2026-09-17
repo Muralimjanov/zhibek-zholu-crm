@@ -31,6 +31,11 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../audit/audit.types';
 import { FileStorageService } from '../files/file-storage.service';
 import { sendPrivateFile } from '../files/file-response';
+import { ChangePasswordDto, StartEmailChangeDto } from './dto/account-security.dto';
+import { VerifyEmailCodeDto } from '../email-codes/email-codes.dto';
+import { RequireEmailCode } from '../email-codes/require-email-code.decorator';
+import { IssuedEmailCode } from '../email-codes/email-codes.service';
+import { Post } from '@nestjs/common';
 
 /**
  * Account CREATION and DISABLE live in ConfirmationsController
@@ -63,6 +68,47 @@ export class UsersController {
   ): Promise<UserResponseDto> {
     const user = await this.usersService.updateOwnProfile(actor, dto, ctxOf(req));
     return this.usersService.toResponse(user);
+  }
+
+  /**
+   * Email change, step 1 (needs a `user.email.change` code sent to the CURRENT
+   * address): emails a code to the NEW address.
+   */
+  @SkipConsent()
+  @RequireEmailCode('user.email.change')
+  @Post('me/email')
+  async startEmailChange(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body() dto: StartEmailChangeDto,
+    @Req() req: Request,
+  ): Promise<IssuedEmailCode> {
+    return this.usersService.startEmailChange(actor, dto.email, ctxOf(req));
+  }
+
+  /** Email change, step 2: the code that arrived at the NEW address. */
+  @SkipConsent()
+  @HttpCode(HttpStatus.OK)
+  @Post('me/email/confirm')
+  async confirmEmailChange(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body() dto: VerifyEmailCodeDto,
+    @Req() req: Request,
+  ): Promise<UserResponseDto> {
+    const user = await this.usersService.confirmEmailChange(actor, dto.challengeId, dto.code, ctxOf(req));
+    return this.usersService.toResponse(user);
+  }
+
+  /** Needs the current password and a `user.password.change` code. Signs out every session. */
+  @SkipConsent()
+  @RequireEmailCode('user.password.change')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('me/password')
+  async changePassword(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.usersService.changePassword(actor, dto.currentPassword, dto.newPassword, ctxOf(req));
   }
 
   /** Profile photo: JPEG, PNG or WebP; stored encrypted, served only to authorised users. */

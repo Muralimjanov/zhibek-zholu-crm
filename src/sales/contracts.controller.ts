@@ -18,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { RequireEmailCode } from '../email-codes/require-email-code.decorator';
 import { UserRole } from '@prisma/client';
 import { Request, Response } from 'express';
 import { AuthenticatedUser } from '../auth/types/authenticated-user';
@@ -67,6 +68,7 @@ export class ContractsController {
   }
 
   @Roles(...SELLERS, UserRole.accountant)
+  @RequireEmailCode('contract.deposit')
   @Post(':id/deposit')
   markDeposit(
     @CurrentUser() actor: AuthenticatedUser,
@@ -79,6 +81,7 @@ export class ContractsController {
 
   /** Upload/replace the signed contract document (PDF, JPEG or PNG). */
   @Roles(...SELLERS)
+  @RequireEmailCode('contract.file')
   @Put(':id/file')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
@@ -105,6 +108,7 @@ export class ContractsController {
   }
 
   @Roles(UserRole.director, UserRole.head_of_sales)
+  @RequireEmailCode('contract.delete')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser() actor: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {

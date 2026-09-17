@@ -5,12 +5,13 @@ Backend CRM MVP для ОсОО «Ош Жибек Жолу» по `TZ_CRM_DEV_v2
 автоматической фиксацией прогулов, зарплата (налог, штрафы), бухгалтерия с
 закрытием периодов и экспортом в Excel, ежедневные отчёты для директора и
 инвесторов, dashboard/аналитика, юридические документы и согласия.
-Учёт арендаторов, интеграции с кассами/1С и push-уведомления — вне этой
-версии (ТЗ). Фронтенд — следующий этап.
+Вход: пароль + код на почту; важные действия подтверждаются кодом из письма;
+зашифрованные резервные копии базы скачиваются на компьютер Директора.
+Фронтенд делает отдельный разработчик по Swagger.
 
 Безопасность: `docs/THREAT_MODEL.md`. Ручное тестирование через Swagger:
-`docs/API_TESTING.md`. Временный тестовый сервер (Render + Docker):
-`docs/DEPLOY.md`. Открытые вопросы и принятые
+`docs/API_TESTING.md`. Сервер (Render + Docker): `docs/DEPLOY.md`.
+Резервные копии и восстановление: `docs/BACKUPS.md`. Открытые вопросы и принятые
 технические допущения: `OPEN_QUESTIONS_ADDENDUM.md`.
 
 ## Stack
@@ -50,7 +51,7 @@ without them encrypted data cannot be recovered.
 reads confirmation codes from a real (local) mailbox:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d mailpit   # SMTP :1025, UI http://localhost:8025
+bash dev-tools/mailpit/macos/install.sh   # or Windows install.ps1 / docker compose; see dev-tools/mailpit/README.md
 # .env: DATABASE_URL_TEST=postgresql://.../uzz_crm_test   (name MUST end with _test)
 npm run test:e2e:real-db
 ```
@@ -71,26 +72,20 @@ The schema gained a `PendingAction` table. Re-run the migration:
 npx prisma migrate dev --name add_confirmation_codes
 ```
 
-### Email (SMTP) for confirmation codes
+### Email — required
 
-Confirmation-code emails require SMTP settings in `.env`
-(`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`). With
-`NODE_ENV=production`, `SMTP_USER` and `SMTP_PASS` are both mandatory;
-outside production they may be left empty for an auth-less local catcher
-(Mailpit via `docker-compose.dev.yml`). Setting only one of the two is
-always treated as "not configured". This is
-intentionally generic — point it at whichever provider's SMTP relay you
-use (Gmail, SES, Mailgun, your own mail server, etc.); no vendor is
-hardcoded. **If SMTP isn't configured, the system still works**: pending
-actions are still created and a Director can approve them via
-`GET /api/v1/confirmations/pending` in-app — email is a convenience
-channel, not a hard dependency.
+Every login sends a code by email, so a deployed server (`NODE_ENV` other
+than development/test) **refuses to start** without email delivery:
 
-At least one active Director account needs an `email` set for the code
-to actually be delivered anywhere (`SEED_DIRECTOR_EMAIL` for a fresh
-database). For an existing Director use the guarded ops script - it only
-touches an active director, refuses to overwrite an existing email without
-`--overwrite`, and writes an audit event:
+- `EMAIL_TRANSPORT=smtp` (default): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
+  `SMTP_PASS`, `SMTP_FROM`. Locally, credentials may be empty for Mailpit
+  (`docker-compose.dev.yml`, UI http://localhost:8025).
+- `EMAIL_TRANSPORT=brevo`: `BREVO_API_KEY` + `SMTP_FROM` (a sender verified
+  in Brevo). HTTPS only - use it where outbound SMTP ports are blocked
+  (Render free tier).
+
+Every account needs a real, unique email (`EMAIL_TAKEN` otherwise). For an
+existing Director without one use the guarded ops script:
 
 ```bash
 npx ts-node prisma/set-director-email.ts --username director1 --email you@example.com [--overwrite]
@@ -98,22 +93,15 @@ npx ts-node prisma/set-director-email.ts --username director1 --email you@exampl
 
 ## First Director account (bootstrap)
 
-There is no public registration endpoint by design (see
-`OPEN_QUESTIONS.md` #2/#3). To create the very first `director` account in
-a fresh database, use the guarded seed script instead of an HTTP call:
+There is no public registration endpoint by design. The very first
+`director` is created by `prisma/seed.ts` - run automatically at container
+start and by `npm run seed:director` locally - **only** when the `User` table
+is completely empty and all of `SEED_DIRECTOR_USERNAME`,
+`SEED_DIRECTOR_PASSWORD` (≥ 12), `SEED_DIRECTOR_FULL_NAME` and
+`SEED_DIRECTOR_EMAIL` are set. Without the variables it does nothing. Remove
+`SEED_DIRECTOR_PASSWORD` from the server after the first login.
 
-```bash
-# in .env: SEED_DIRECTOR_USERNAME / SEED_DIRECTOR_PASSWORD / SEED_DIRECTOR_FULL_NAME
-npm run seed:director
-# equivalently: npx prisma db seed
-```
-
-The script (`prisma/seed.ts`) only acts on a **completely empty** `User`
-table - if any user already exists it logs that and exits without doing
-anything, so it cannot accidentally create a second "first" director. This
-is a dev/ops bootstrap tool, not a production registration mechanism; the
-permanent process for provisioning the first production Director account
-is still open (`OPEN_QUESTIONS.md` #3).
+There are no demo accounts or demo data.
 
 ## API overview (`/api/v1`, full schema in Swagger)
 
@@ -135,6 +123,17 @@ Money: integer strings in **tyiyn** (1 KGS = 100). Areas/percents: decimal strin
 | Accounting | `POST/GET /transactions`, `GET/PATCH/DELETE /transactions/:id`, `PUT/GET /transactions/:id/attachment`, `GET/POST /accounting/periods[/:period/close]`, `GET /accounting/summary`, `GET /accounting/export.xlsx` | accountant writes (own, open period) · director reads, deletes |
 | Daily reports | `GET /daily-reports`, `GET /daily-reports/:id`, `POST /daily-reports/regenerate` | director & investors all · head of sales sales · accountant financial |
 | Dashboard | `GET /dashboard`, `GET /analytics/sales` | director & investors (aggregates) · director & head of sales |
+| Email codes | `POST /email-codes` | any user, for themself |
+| Account security | `POST /users/me/email`, `POST /users/me/email/confirm`, `POST /users/me/password` | self |
+| Backups | `GET /backups/status`, `GET /backups/export` (director) · `GET /backups/agent/export` (agent token) | director · backup agent |
+
+**Emailed codes.** Login is two steps: `POST /auth/login` (password) →
+`POST /auth/login/verify` (code from the email). Important actions need a code
+sent to the acting user: request it with `POST /email-codes { action,
+resourceId }`, then repeat the request with `x-confirmation-id` and
+`x-confirmation-code`. The list of actions is `src/email-codes/email-code-actions.ts`
+(deletes, contract deposit/file, shift correction, payroll settings/confirm,
+transactions, period close, email/password change, backup download).
 
 Closing the accountant's shift generates the day's financial report; closing
 the head of sales' shift generates the sales report. A daily job (00:05
@@ -142,54 +141,25 @@ the head of sales' shift generates the sales report. A daily job (00:05
 
 ## Auth foundation details
 
-- `POST /api/v1/auth/login` — username+password → access token (body) +
-  refresh token (HttpOnly cookie) + CSRF token (readable cookie).
+- `POST /api/v1/auth/login` — username+password → `{ mfaRequired, challengeId,
+  expiresAt, emailHint }`; a one-time code is emailed. No tokens yet.
+- `POST /api/v1/auth/login/verify` — `{ challengeId, code }` → access token
+  (body) + refresh token (HttpOnly cookie) + CSRF token (body + readable cookie).
 - `POST /api/v1/auth/refresh` — rotates the refresh token (old token dies
   immediately); requires the CSRF header to match the CSRF cookie.
 - `POST /api/v1/auth/logout` — revokes the current refresh session family,
   clears cookies.
 - `GET /api/v1/auth/me` — current authenticated user's safe profile.
-- `PATCH /api/v1/users/me` — self profile update; the DTO structurally has
-  no `role` field, so a role change is impossible through this endpoint,
-  and the global `ValidationPipe` (`forbidNonWhitelisted`) rejects a
-  request that tries to smuggle one in.
+- `PATCH /api/v1/users/me` — name/phone only; no `role`, no `email`
+  (`forbidNonWhitelisted` rejects them).
 - `GET /api/v1/users/:id` — minimal IDOR guard: visible to the record
   owner, the account's creator, or a director.
 - `POST /api/v1/consents`, `GET /api/v1/consents/me` — versioned consent
-  records (see `OPEN_QUESTIONS.md` for what legal content is NOT decided
-  here).
-
-### Maker-checker: account creation and disabling require Director approval
-
-This is an explicit product decision layered on top of the original RBAC
-(not derived from the source TЗ) — **every** account creation or disable,
-including a Director's own, only takes effect after a Director approves a
-one-time code emailed to every active Director account:
-
-- `POST /api/v1/confirmations/users` — initiate account creation. RBAC
-  (`ROLE_CREATION_MATRIX`) is still checked immediately here — a forbidden
-  attempt gets a 403 and never creates a `PendingAction` or sends an
-  email. On success, returns `202 Accepted` with
-  `{ pendingActionId, status: "pending", expiresAt, emailDelivery }`. The
-  account does **not** exist yet.
-- `POST /api/v1/confirmations/users/:id/disable` — same pattern for
-  disabling an account.
-- `POST /api/v1/confirmations/:id/confirm` — **Director-only**, strictly
-  rate-limited (5/min on top of the global throttle). Body: `{ code }`.
-  On the correct code, executes the underlying action and returns the
-  resulting `UserResponseDto`. Wrong code → `401` (and counts toward
-  `maxAttempts`, after which the action is permanently `failed` and must
-  be re-initiated). Already-resolved or expired → `409`.
-- `POST /api/v1/confirmations/:id/reject` — Director-only, cancels a
-  pending action.
-- `GET /api/v1/confirmations/pending` — Director-only. Fallback for when
-  email delivery is unavailable/unconfigured: a Director can see and act
-  on pending approvals from inside the app itself. Never returns the
-  code, the code hash, or the password hash.
-
+  records.
 Every route requires authentication by default (global `JwtAuthGuard`);
 `@Public()` is the explicit, visible opt-out used only on
-`/auth/login`, `/auth/refresh`, `/auth/logout`.
+`/auth/login`, `/auth/login/verify`, `/auth/refresh`, `/auth/logout`,
+`/legal/documents`, `/health` and `/backups/agent/export` (own token).
 
 ## Security decisions worth knowing about
 
@@ -213,10 +183,17 @@ Every route requires authentication by default (global `JwtAuthGuard`);
   `src/audit/audit.types.ts` — metadata is an allowlist, not a blocklist;
   unknown fields are dropped, and secrets/tokens/passport numbers are
   explicitly forbidden even if accidentally passed in.
-- **Encryption foundation**: `EncryptionService` (AES-256-GCM, versioned
-  keys) exists and is tested, but is **not yet applied to any field** —
-  see `OPEN_QUESTIONS.md` #27/#28. It's ready for Booking/Contract
-  `passport_number`/`address` once that decision is made.
+- **Encryption**: buyer/employee PII, file names, report bodies and files are
+  AES-256-GCM encrypted (`FieldCipher`, `FileStorageService`), see
+  `docs/THREAT_MODEL.md`.
+- **Emailed codes** (`EmailCodesService`): SHA-256(id:code) only, bound to
+  user + purpose + action + route resource, single use (atomic claim), 5
+  attempts, 10 min TTL, newer code supersedes older, 5 codes per 15 min per
+  user. Checked by a global interceptor after all guards; a 4xx rejection of
+  the protected request releases the code, a 5xx keeps it consumed.
+- **Backups** (`src/backups`): consistent REPEATABLE READ logical snapshot +
+  file blobs + app keys, gzip, AES-256-GCM with the key wrapped by the
+  Director's RSA-4096 public key; the server never holds the private key.
 - **Maker-checker confirmation codes**: `ConfirmationsService` generates
   an 8-character human-typeable code (excludes visually ambiguous
   characters), stores only its SHA-256 hash, enforces a short TTL
@@ -225,7 +202,7 @@ Every route requires authentication by default (global `JwtAuthGuard`);
   `crypto.timingSafeEqual`, and never logs the raw code (see
   `redactMetadata`'s forbidden-keys list). Email delivery is best-effort:
   a Director can still act via `GET /confirmations/pending` if SMTP is
-  down or unconfigured. **Concurrency**: a correct code first atomically
+  down. **Concurrency**: a correct code first atomically
   claims the action (`pending -> confirmed`, expiry re-checked in the same
   write) and only the winner executes it - concurrent confirmations get
   `409`. Wrong-code attempts are counted with compare-and-swap, so
@@ -246,6 +223,9 @@ Every route requires authentication by default (global `JwtAuthGuard`);
 - `npm run test:e2e` still uses an in-memory Prisma mock (wiring only);
   SQL behaviour, migrations, constraints and concurrency are covered by
   `npm run test:e2e:real-db`, which needs a local PostgreSQL and Mailpit.
+  The mock suite skips emailed codes via `TEST_BYPASS_*` switches that are
+  honoured only when `NODE_ENV=test`; the real flows are covered by
+  `test/real-db/email-codes.e2e-spec.ts`.
 - Rate-limit counters are in-memory per process; behind a reverse proxy
   `req.ip` is the proxy's address until `trust proxy` is configured for
   the real topology (`OPEN_QUESTIONS.md` #39/#41).

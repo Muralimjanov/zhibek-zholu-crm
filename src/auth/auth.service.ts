@@ -1,12 +1,14 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AuditResult, User, UserStatus } from '@prisma/client';
+import { AuditResult, EmailCodePurpose, User, UserStatus } from '@prisma/client';
 import { UsersService } from '../users/users.service';
 import { PasswordService } from './password.service';
 import { RefreshTokenService, RotateContext } from './refresh-token.service';
 import { AppConfigService } from '../config/app-config.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../audit/audit.types';
+import { EmailCodesService, IssuedEmailCode } from '../email-codes/email-codes.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface LoginResult {
   accessToken: string;
@@ -32,6 +34,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: AppConfigService,
     private readonly audit: AuditService,
+    private readonly emailCodes?: EmailCodesService,
+    private readonly prisma?: PrismaService,
   ) {}
 
   private async dummyHashCompare(): Promise<void> {
@@ -44,7 +48,53 @@ export class AuthService {
     );
   }
 
+  /**
+   * Step 1 of login: checks the password, then emails a one-time code to the
+   * account's address. No tokens are issued until the code is verified.
+   */
+  async startLogin(username: string, password: string, ctx: RotateContext = {}): Promise<IssuedEmailCode> {
+    const user = await this.verifyCredentials(username, password, ctx);
+    if (!user.email) {
+      await this.audit.record({
+        actorUserId: user.id,
+        action: AuditAction.LOGIN_FAILURE,
+        result: AuditResult.failure,
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+        metadata: { reason: 'email_not_configured' },
+      });
+      // Only reachable with the correct password: the account needs an email
+      // set by a Director before it can sign in.
+      throw new ForbiddenException('AUTH_EMAIL_NOT_CONFIGURED');
+    }
+    return this.requireEmailCodes().issue({ user, purpose: EmailCodePurpose.login, ctx });
+  }
+
+  /** Step 2 of login: a correct, unused, unexpired code issues the session. */
+  async verifyLoginCode(challengeId: string, code: string, ctx: RotateContext = {}): Promise<LoginResult> {
+    const record = await this.requireEmailCodes().consume({ challengeId, code, purpose: EmailCodePurpose.login, ctx });
+    const user = await this.usersService.findById(record.userId);
+    if (!user || user.status !== UserStatus.active) {
+      throw new UnauthorizedException(GENERIC_LOGIN_ERROR);
+    }
+    // Receiving the code proves the address works.
+    const verified =
+      user.emailVerifiedAt || !this.prisma
+        ? user
+        : await this.prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+    return this.completeLogin(verified, ctx);
+  }
+
+  /**
+   * Password-only login. Used by the controller ONLY when
+   * TEST_BYPASS_LOGIN_EMAIL_CODE is honoured (NODE_ENV=test).
+   */
   async login(username: string, password: string, ctx: RotateContext = {}): Promise<LoginResult> {
+    const user = await this.verifyCredentials(username, password, ctx);
+    return this.completeLogin(user, ctx);
+  }
+
+  private async verifyCredentials(username: string, password: string, ctx: RotateContext): Promise<User> {
     const user = await this.usersService.findByUsername(username);
 
     if (!user) {
@@ -73,7 +123,10 @@ export class AuthService {
       // reveal account status to an unauthenticated caller (AUTH_SPEC.md §16).
       throw new UnauthorizedException(GENERIC_LOGIN_ERROR);
     }
+    return user;
+  }
 
+  private async completeLogin(user: User, ctx: RotateContext): Promise<LoginResult> {
     const accessToken = this.signAccessToken(user);
     const refresh = await this.refreshTokenService.issue(user.id, ctx);
 
@@ -91,6 +144,11 @@ export class AuthService {
       refreshToken: refresh.raw,
       user,
     };
+  }
+
+  private requireEmailCodes(): EmailCodesService {
+    if (!this.emailCodes) throw new Error('EmailCodesService is not available');
+    return this.emailCodes;
   }
 
   async refresh(rawRefreshToken: string, ctx: RotateContext = {}): Promise<LoginResult> {

@@ -65,6 +65,8 @@ function buildDeps() {
     refreshToken: {
       updateMany: jest.fn(async () => ({ count: 0 })),
     },
+    $queryRawUnsafe: jest.fn(async () => []),
+    $transaction: jest.fn(async (fn: any) => fn(prisma)),
   } as any;
 
   const passwordService = { hash: jest.fn(async () => 'hashed-password') } as any;
@@ -81,6 +83,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     usersById.set(director.id, buildUser({ id: director.id, username: director.username, role: director.role }));
     const payload = await service.prepareCreateUser(director, {
       username: 'headofsales1',
+      email: 'headofsales1@example.com',
       password: 'a-strong-password-1',
       fullName: 'Head Of Sales',
       role: UserRole.head_of_sales,
@@ -98,6 +101,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     usersById.set(hos.id, buildUser({ id: hos.id, username: hos.username, role: hos.role }));
     const payload = await service.prepareCreateUser(hos, {
       username: 'manager1',
+      email: 'manager1@example.com',
       password: 'a-strong-password-1',
       fullName: 'Manager One',
       role: UserRole.sales_manager,
@@ -112,6 +116,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     await expect(
       service.prepareCreateUser(hos, {
         username: 'wannabe-director',
+        email: 'wannabe-director@example.com',
         password: 'a-strong-password-1',
         fullName: 'X',
         role: UserRole.director,
@@ -128,6 +133,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     await expect(
       service.prepareCreateUser(investor, {
         username: 'nope',
+        email: 'nope@example.com',
         password: 'a-strong-password-1',
         fullName: 'X',
         role: UserRole.sales_manager,
@@ -141,6 +147,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     await expect(
       service.prepareCreateUser(manager, {
         username: 'nope2',
+        email: 'nope2@example.com',
         password: 'a-strong-password-1',
         fullName: 'X',
         role: UserRole.accountant,
@@ -154,6 +161,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     usersById.set(director.id, buildUser({ id: director.id, username: director.username, role: director.role }));
     const dto = {
       username: 'accountant1',
+      email: 'accountant1@example.com',
       password: 'a-strong-password-1',
       fullName: 'Accountant',
       role: UserRole.accountant,
@@ -169,6 +177,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     usersById.set(director.id, buildUser({ id: director.id, username: director.username, role: director.role }));
     const payload = await service.prepareCreateUser(director, {
       username: 'racer1',
+      email: 'racer1@example.com',
       password: 'a-strong-password-1',
       fullName: 'Racer',
       role: UserRole.accountant,
@@ -188,6 +197,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     usersById.set(director.id, buildUser({ id: director.id, username: director.username, role: director.role }));
     const payload = await service.prepareCreateUser(director, {
       username: 'investor1',
+      email: 'investor1@example.com',
       password: 'super-secret-plain-password',
       fullName: 'Investor',
       role: UserRole.investor,
@@ -229,6 +239,7 @@ describe('UsersService.prepareCreateUser / executeCreateUser', () => {
     usersById.set(hos.id, buildUser({ id: hos.id, username: hos.username, role: hos.role }));
     const payload = await service.prepareCreateUser(hos, {
       username: 'teammate',
+      email: 'teammate@example.com',
       password: 'a-strong-password-1',
       fullName: 'Team Mate',
       role: UserRole.sales_manager,

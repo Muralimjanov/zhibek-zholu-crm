@@ -31,3 +31,13 @@ process.env.BUSINESS_TIMEZONE = 'Asia/Bishkek';
 process.env.WORKING_WEEKDAYS = '1,2,3,4,5';
 process.env.FILE_STORAGE_DIR = require('path').join(require('os').tmpdir(), `uzz-crm-test-files-${process.pid}`);
 process.env.SWAGGER_ENABLED = 'true';
+
+// Emailed codes are ON by default. Suites that test other modules opt out of
+// the step-up codes (never login) at the top of the file; reset here so the
+// switch never leaks from one file into the next in the same process.
+delete process.env.TEST_BYPASS_LOGIN_EMAIL_CODE;
+delete process.env.TEST_BYPASS_ACTION_EMAIL_CODE;
+process.env.EMAIL_TRANSPORT = 'smtp';
+process.env.EMAIL_CODE_MAX_PER_15_MIN = '1000';
+delete process.env.BACKUP_PUBLIC_KEY;
+delete process.env.BACKUP_AGENT_TOKEN_SHA256;

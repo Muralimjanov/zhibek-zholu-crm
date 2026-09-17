@@ -51,3 +51,28 @@ describe('email code test bypass switches', () => {
     expect(() => config({ EMAIL_TRANSPORT: 'pigeon' }).isEmailConfigured).toThrow();
   });
 });
+
+describe('BACKUP_PUBLIC_KEY parsing (values pasted into a hosting dashboard)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { generateKeyPairSync } = require('crypto');
+  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  const b64 = Buffer.from(publicKey).toString('base64');
+  const pem = (v: string) => config({ BACKUP_PUBLIC_KEY: v }).backupPublicKeyPem;
+
+  it.each([
+    ['plain base64', b64],
+    ['with a label', `BACKUP_PUBLIC_KEY:\n${b64}`],
+    ['with KEY= and quotes', `BACKUP_PUBLIC_KEY="${b64}"`],
+    ['wrapped in lines and spaces', ` ${b64.slice(0, 300)}\n${b64.slice(300)} `],
+    ['raw PEM', publicKey],
+    ['one-line PEM with \\n', publicKey.replace(/\n/g, '\\n')],
+  ])('accepts %s', (_name, value) => {
+    expect(pem(value)?.trim()).toBe(publicKey.trim());
+  });
+
+  it('rejects a truncated key and garbage with a clear message', () => {
+    expect(() => pem(b64.slice(0, 300))).toThrow('incomplete');
+    expect(() => pem('not a key!')).toThrow('not valid');
+    expect(pem('')).toBeUndefined();
+  });
+});

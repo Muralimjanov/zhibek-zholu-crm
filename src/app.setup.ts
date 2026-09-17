@@ -30,7 +30,13 @@ export function configureApp(app: INestApplication): void {
     );
   }
   const backupKey = config.backupPublicKeyPem;
-  if (backupKey) publicKeyFingerprint(backupKey); // throws on a malformed key
+  if (backupKey) {
+    try {
+      publicKeyFingerprint(backupKey);
+    } catch {
+      throw new Error('BACKUP_PUBLIC_KEY is not a valid RSA public key - copy it again from "npm run backup:keygen" output');
+    }
+  }
 
   // Only trust X-Forwarded-* when a reverse proxy is explicitly configured;
   // otherwise a client could spoof its IP and bypass per-IP rate limits.

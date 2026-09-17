@@ -304,11 +304,16 @@ export class AppConfigService {
   }
 
   // --- Backups to the Director's computer ------------------------------------
-  /** PEM (or base64 of a PEM) RSA public key; backups are encrypted to it. */
+  /**
+   * PEM (or base64 of a PEM) RSA public key; backups are encrypted to it.
+   * Tolerates what a dashboard paste typically adds: surrounding quotes or
+   * spaces, line breaks inside the base64, a leading "BACKUP_PUBLIC_KEY=" /
+   * "BACKUP_PUBLIC_KEY:" label, and literal "\\n" in a one-line PEM.
+   */
   get backupPublicKeyPem(): string | undefined {
     const raw = this.config.get<string>('BACKUP_PUBLIC_KEY');
-    if (!raw) return undefined;
-    return raw.includes('BEGIN PUBLIC KEY') ? raw.replace(/\\n/g, '\n') : Buffer.from(raw, 'base64').toString('utf8');
+    if (!raw || !raw.trim()) return undefined;
+    return normalizeBackupPublicKey(raw);
   }
 
   /** SHA-256 (hex) of the backup agent's token. The token itself is never stored server-side. */
@@ -331,4 +336,23 @@ export class AppConfigService {
     }
     return out;
   }
+}
+
+export function normalizeBackupPublicKey(raw: string): string {
+  let value = raw.trim().replace(/^BACKUP_PUBLIC_KEY\s*[:=]\s*/i, '').replace(/^["']|["']$/g, '').trim();
+  if (!value.includes('BEGIN PUBLIC KEY')) {
+    const base64 = value.replace(/\s+/g, '');
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+      throw new Error('BACKUP_PUBLIC_KEY is not valid: expected the base64 line printed by "npm run backup:keygen" (starts with LS0tLS1CRUdJTiBQVUJMSUMgS0VZ)');
+    }
+    value = Buffer.from(base64, 'base64').toString('utf8');
+  }
+  value = value.replace(/\\n/g, '\n');
+  if (!/-----BEGIN PUBLIC KEY-----[\s\S]+-----END PUBLIC KEY-----/.test(value)) {
+    throw new Error(
+      'BACKUP_PUBLIC_KEY is incomplete: it must decode to a whole PEM public key (BEGIN ... END). ' +
+        'Copy the entire base64 line (1068 characters) from the keygen output.',
+    );
+  }
+  return value;
 }

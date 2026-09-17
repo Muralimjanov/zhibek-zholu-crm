@@ -83,8 +83,7 @@ export class EmailService {
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
-      // The response body may echo recipient addresses - log the status only.
-      throw new Error(`Brevo API responded with HTTP ${res.status}`);
+      throw new Error(`Brevo API responded with HTTP ${res.status}${await brevoErrorSummary(res)}`);
     }
   }
 }
@@ -95,4 +94,20 @@ export function parseAddress(value: string): { name?: string; email: string } {
   if (!match) return { email: value.trim() };
   const name = match[1].replace(/^"|"$/g, '').trim();
   return name ? { name, email: match[2].trim() } : { email: match[2].trim() };
+}
+
+/**
+ * Brevo errors look like {"code":"unauthorized","message":"Key not found"}.
+ * The message is logged so the cause (wrong key, unverified sender, blocked
+ * IP) is visible, but email addresses in it are masked.
+ */
+async function brevoErrorSummary(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { code?: unknown; message?: unknown };
+    const code = typeof body.code === 'string' ? body.code : '';
+    const message = typeof body.message === 'string' ? body.message.replace(/[^\s@]+@[^\s@]+/g, '<email>').slice(0, 300) : '';
+    return code || message ? `: ${code}${code && message ? ' - ' : ''}${message}` : '';
+  } catch {
+    return '';
+  }
 }

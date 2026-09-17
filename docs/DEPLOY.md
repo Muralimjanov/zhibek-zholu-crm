@@ -75,12 +75,7 @@ openssl rand -base64 18
 
 ## 6. Фронтенд (сайт CRM)
 
-Blueprint создаёт и статический сайт `uzz-crm-web` (папка `frontend/`).
-1. `uzz-crm-web` → **Environment** → `VITE_API_URL` = `https://<адрес uzz-crm-api>/api/v1` → **Save** (сайт пересоберётся).
-2. `uzz-crm-api` → **Environment** → `CORS_ALLOWED_ORIGINS` = `https://<адрес uzz-crm-web>` (если нужен и локальный фронт — через запятую) → **Save**.
-3. Откройте адрес `uzz-crm-web` и войдите директором.
-
-Подробнее — `frontend/README.md`. Ниже — правила для любого фронтенда, подключающегося к API.
+Пока не разворачивается на Render (решение владельца 2026-09-18). Код лежит в `frontend/`, как вернуть статический сайт — в `frontend/README.md`.
 
 ### Правила подключения
 

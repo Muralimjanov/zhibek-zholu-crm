@@ -73,7 +73,16 @@ openssl rand -base64 18
 - в Render → Logs найдите `Email code ... not delivered`;
 - проверьте `BREVO_API_KEY` и что адрес в `SMTP_FROM` подтверждён в Brevo.
 
-## 6. Фронтенд
+## 6. Фронтенд (сайт CRM)
+
+Blueprint создаёт и статический сайт `uzz-crm-web` (папка `frontend/`).
+1. `uzz-crm-web` → **Environment** → `VITE_API_URL` = `https://<адрес uzz-crm-api>/api/v1` → **Save** (сайт пересоберётся).
+2. `uzz-crm-api` → **Environment** → `CORS_ALLOWED_ORIGINS` = `https://<адрес uzz-crm-web>` (если нужен и локальный фронт — через запятую) → **Save**.
+3. Откройте адрес `uzz-crm-web` и войдите директором.
+
+Подробнее — `frontend/README.md`. Ниже — правила для любого фронтенда, подключающегося к API.
+
+### Правила подключения
 
 - Базовый URL: `https://<сервис>.onrender.com/api/v1`; сценарии и коды ошибок описаны в `docs/API_TESTING.md`.
 - Вход в два шага: `login` → экран ввода кода → `login/verify`.

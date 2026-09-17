@@ -1,0 +1,184 @@
+@import 'tailwindcss';
+@import '@fontsource/fira-sans/cyrillic-400.css';
+@import '@fontsource/fira-sans/cyrillic-500.css';
+@import '@fontsource/fira-sans/cyrillic-600.css';
+@import '@fontsource/fira-sans/cyrillic-700.css';
+@import '@fontsource/fira-sans/latin-400.css';
+@import '@fontsource/fira-sans/latin-500.css';
+@import '@fontsource/fira-sans/latin-600.css';
+@import '@fontsource/fira-sans/latin-700.css';
+@import '@fontsource/fira-code/latin-500.css';
+@import '@fontsource/fira-code/cyrillic-500.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design system (ui-ux-pro-max): data-dense dashboard, teal "trust" primary,
+ * professional blue accent, semantic status colors. All text pairs >= 4.5:1.
+ */
+:root {
+  color-scheme: light;
+  --background: #f4f7f7;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --muted: #eef2f4;
+  --muted-foreground: #475569;
+  --border: #dde4e8;
+  --input: #cfd8dd;
+  --primary: #0f766e;
+  --primary-hover: #0d645d;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e6f4f2;
+  --accent: #0369a1;
+  --accent-soft: #e6f1f8;
+  --success: #15803d;
+  --success-soft: #e8f5ec;
+  --warning: #b45309;
+  --warning-soft: #fdf3e6;
+  --destructive: #dc2626;
+  --destructive-hover: #b91c1c;
+  --destructive-soft: #fdecec;
+  --ring: #0f766e;
+  --sidebar: #0b3b37;
+  --sidebar-foreground: #e6f2f0;
+  --sidebar-muted: #9fc3be;
+  --sidebar-active: #13564f;
+  --chart-1: #0f766e;
+  --chart-2: #0369a1;
+  --chart-3: #b45309;
+  --chart-4: #7c3aed;
+  --chart-5: #be185d;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0b1215;
+  --foreground: #e6eef0;
+  --card: #111b1f;
+  --card-foreground: #e6eef0;
+  --muted: #17242a;
+  --muted-foreground: #9fb0b8;
+  --border: #22333a;
+  --input: #2c3f47;
+  --primary: #2dd4bf;
+  --primary-hover: #5eead4;
+  --primary-foreground: #042f2e;
+  --primary-soft: #0f2e2c;
+  --accent: #38bdf8;
+  --accent-soft: #0c2a3a;
+  --success: #4ade80;
+  --success-soft: #0f2a1a;
+  --warning: #fbbf24;
+  --warning-soft: #2e230b;
+  --destructive: #f87171;
+  --destructive-hover: #fca5a5;
+  --destructive-soft: #2e1414;
+  --ring: #2dd4bf;
+  --sidebar: #0a1a1c;
+  --sidebar-foreground: #dcebe8;
+  --sidebar-muted: #86a39f;
+  --sidebar-active: #13302d;
+  --chart-1: #2dd4bf;
+  --chart-2: #38bdf8;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-5: #f472b6;
+}
+
+@theme inline {
+  --font-sans: 'Fira Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-lg: 0.625rem;
+  --radius-md: 0.5rem;
+  --radius-sm: 0.375rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button,
+  [role='button'],
+  a {
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes uzz-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes uzz-pop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+}
+.uzz-fade[data-state='open'] {
+  animation: uzz-fade-in 150ms ease-out;
+}
+.uzz-pop[data-state='open'] {
+  animation: uzz-pop-in 180ms ease-out;
+}

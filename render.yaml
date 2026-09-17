@@ -68,6 +68,51 @@ services:
       - key: BACKUP_AGENT_TOKEN_SHA256
         sync: false # printed by "npm run backup:agent-token"
 
+  # Frontend (React SPA) - free static site. After the first deploy put its
+  # https address into CORS_ALLOWED_ORIGINS of uzz-crm-api.
+  - type: web
+    name: uzz-crm-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: VITE_API_URL
+        sync: false # https://<uzz-crm-api address>/api/v1
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      # The sha256 is the inline theme script in frontend/index.html - update it if that script changes.
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self' 'sha256-JZ1WohQZVuVaNcSSO/3gmm8hsY5WS3BBNF3bgM6NwPA='; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' https://*.onrender.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: "camera=(), microphone=(), geolocation=(), payment=()"
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+
 databases:
   - name: uzz-crm-db
     plan: free

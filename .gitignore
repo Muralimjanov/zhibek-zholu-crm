@@ -9,3 +9,6 @@ backup-keys/
 *.uzzbak
 restored-keys*.env
 *.pem
+
+# Local preview config for the desktop app
+.claude/

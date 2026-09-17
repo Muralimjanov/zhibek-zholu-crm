@@ -14,3 +14,4 @@ backup-keys
 *.uzzbak
 *.pem
 restored-keys*.env
+frontend

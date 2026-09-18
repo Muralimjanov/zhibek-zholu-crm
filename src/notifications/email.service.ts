@@ -49,8 +49,13 @@ export class EmailService {
 
   async send(input: SendEmailInput): Promise<void> {
     if (this.config.emailTransport === 'brevo') {
-      await this.sendViaBrevo(input);
-      this.logger.log(`Email sent: "${input.subject}" to ${input.to.length} recipient(s)`);
+      const messageId = await this.sendViaBrevo(input);
+      // The message id is what Brevo's own log is searched by, so a code that
+      // the provider accepted but never delivered can still be traced.
+      this.logger.log(
+        `Email sent: "${input.subject}" to ${input.to.map(maskEmail).join(', ')}` +
+          (messageId ? ` (Brevo messageId ${messageId})` : ''),
+      );
       return;
     }
     const transporter = this.getTransporter();
@@ -60,14 +65,14 @@ export class EmailService {
       subject: input.subject,
       text: input.text,
     });
-    this.logger.log(`Email sent: "${input.subject}" to ${input.to.length} recipient(s)`);
+    this.logger.log(`Email sent: "${input.subject}" to ${input.to.map(maskEmail).join(', ')}`);
   }
 
   /**
    * Brevo transactional email over HTTPS (port 443). Hosts such as Render's
    * free tier block outbound SMTP ports 25/465/587.
    */
-  private async sendViaBrevo(input: SendEmailInput): Promise<void> {
+  private async sendViaBrevo(input: SendEmailInput): Promise<string | undefined> {
     const apiKey = this.config.brevoApiKey;
     if (!apiKey) throw new Error('EMAIL_TRANSPORT=brevo but BREVO_API_KEY is not set');
     const sender = parseAddress(this.config.smtpFrom);
@@ -85,7 +90,26 @@ export class EmailService {
     if (!res.ok) {
       throw new Error(`Brevo API responded with HTTP ${res.status}${await brevoErrorSummary(res)}`);
     }
+    return brevoMessageId(res);
   }
+}
+
+/** Brevo answers a successful send with {"messageId":"<...@smtp-relay.brevo.com>"}. */
+async function brevoMessageId(res: Response): Promise<string | undefined> {
+  try {
+    const body = (await res.json()) as { messageId?: unknown };
+    return typeof body.messageId === 'string' ? body.messageId.slice(0, 200) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** "aibek@example.kg" -> "ai***@example.kg"; never log a full address. */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf('@');
+  if (at <= 0) return '***';
+  const local = email.slice(0, at);
+  return `${local.slice(0, Math.min(2, local.length))}***${email.slice(at)}`;
 }
 
 /** "Name <email@x>" or "email@x" -> { name?, email }. */

@@ -13,7 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../audit/audit.types';
 import { AppConfigService } from '../config/app-config.service';
 import { FieldCipher } from '../crypto/field-cipher.service';
-import { EmailService } from '../notifications/email.service';
+import { EmailService, maskEmail } from '../notifications/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestContext, USER_PII } from '../users/users.service';
 import { EMAIL_CODE_ACTIONS, EmailCodeAction } from './email-code-actions';
@@ -287,9 +287,4 @@ export function isUuid(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
-export function maskEmail(email: string): string {
-  const at = email.lastIndexOf('@');
-  if (at <= 0) return '***';
-  const local = email.slice(0, at);
-  return `${local.slice(0, Math.min(2, local.length))}***${email.slice(at)}`;
-}
+export { maskEmail };

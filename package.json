@@ -27,7 +27,8 @@
     "backup:keygen": "ts-node prisma/backup-keygen.ts",
     "backup:agent-token": "ts-node prisma/backup-agent-token.ts",
     "backup:inspect": "ts-node prisma/backup-inspect.ts",
-    "backup:restore": "ts-node prisma/backup-restore.ts"
+    "backup:restore": "ts-node prisma/backup-restore.ts",
+    "ops:delete-users": "ts-node prisma/ops-delete-users.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

@@ -1,11 +1,14 @@
 /**
  * УДАЛЕНИЕ АККАУНТОВ И ИХ ДАННЫХ (необратимо).
  *
- * Показать, что будет удалено (ничего не меняет):
- *   DATABASE_URL='...' npm run ops:delete-users
+ * Адрес базы берётся из --env-file (рекомендуется), из переменной DATABASE_URL
+ * или из .env проекта - именно в этом порядке.
  *
- * Удалить:
- *   DATABASE_URL='...' npm run ops:delete-users -- --apply
+ * Показать, что будет удалено (ничего не меняет):
+ *   npm run ops:delete-users -- --env-file .env.render
+ *
+ * Удалить (нужно подтвердить имя базы из отчёта):
+ *   npm run ops:delete-users -- --env-file .env.render --db uzz_crm_u7hn --apply
  *
  * Дополнительно:
  *   --roles head_of_sales,sales_manager   только эти роли (по умолчанию все, кроме директоров)
@@ -14,6 +17,7 @@
  * Защиты:
  * - директоров не удаляет никогда (иначе в системе не останется владельца);
  * - без --apply только печатает отчёт;
+ * - при --apply требуется --db с именем базы: удалить не из той базы нельзя;
  * - всё удаление идёт одной транзакцией: либо целиком, либо ничего;
  * - журнал аудита сохраняется, у удалённых пользователей ссылка обнуляется.
  *
@@ -30,6 +34,18 @@ export interface Options {
   apply: boolean;
   roles: UserRole[];
   usernames: string[];
+  /** Имя базы, подтверждённое человеком; обязательно при --apply. */
+  db?: string;
+  envFile?: string;
+}
+
+/** Database name from a PostgreSQL connection string. */
+export function databaseName(url: string | undefined): string {
+  try {
+    return new URL(url ?? '').pathname.replace(/^\//, '') || '(не указана)';
+  } catch {
+    return '(не указана)';
+  }
 }
 
 const DELETABLE_ROLES: UserRole[] = [UserRole.head_of_sales, UserRole.sales_manager, UserRole.accountant, UserRole.investor];
@@ -49,10 +65,17 @@ export function parseArgs(argv: string[]): Options {
       `Роли ${unknown.join(', ')} удалять нельзя. Допустимо: ${DELETABLE_ROLES.join(', ')} (директор не удаляется никогда).`,
     );
   }
+  const apply = argv.includes('--apply');
+  const db = value('--db');
+  if (apply && !db) {
+    throw new Error('Для удаления добавьте --db <имя базы из отчёта>: это подтверждение, что чистим именно её.');
+  }
   return {
-    apply: argv.includes('--apply'),
+    apply,
     roles,
     usernames: (value('--usernames') ?? '').split(',').map((u) => u.trim()).filter(Boolean),
+    db,
+    envFile: value('--env-file'),
   };
 }
 
@@ -127,7 +150,8 @@ export async function deleteUsers(prisma: PrismaClient, ids: string[], storageDi
     await tx.pendingAction.updateMany({ where: { rejectedByUserId: { in: ids } }, data: { rejectedByUserId: null } });
     count('files', (await tx.storedFile.deleteMany({ where: { uploadedById: { in: ids } } })).count);
     count('users', (await tx.user.deleteMany({ where: { id: { in: ids } } })).count);
-  });
+    // A remote database (Render is in Frankfurt) needs more than the 5s default.
+  }, { timeout: 120_000, maxWait: 30_000 });
 
   // Encrypted blobs on disk (consents, sessions and email codes go with the user row).
   const root = resolve(storageDir);
@@ -138,14 +162,20 @@ export async function deleteUsers(prisma: PrismaClient, ids: string[], storageDi
 }
 
 async function main() {
-  dotenv.config();
   const opts = parseArgs(process.argv.slice(2));
+  // --env-file wins over the shell, and .env is only the last resort.
+  if (opts.envFile) dotenv.config({ path: opts.envFile, override: true });
+  dotenv.config();
+  const actualDb = databaseName(process.env.DATABASE_URL);
+  if (opts.apply && opts.db !== actualDb) {
+    throw new Error(`Подключение к базе "${actualDb}", а в --db указано "${opts.db}". Удаление отменено.`);
+  }
   const prisma = new PrismaClient();
   try {
     const directors = await prisma.user.count({ where: { role: UserRole.director } });
     const targets = await collectTargets(prisma, opts);
 
-    console.log(`База: ${new URL(process.env.DATABASE_URL ?? '').pathname.slice(1)}`);
+    console.log(`База: ${actualDb}`);
     console.log(`Директоров в базе (не трогаем): ${directors}`);
     if (targets.length === 0) {
       console.log('Подходящих аккаунтов нет — удалять нечего.');
@@ -162,7 +192,7 @@ async function main() {
 
     if (!opts.apply) {
       console.log('\nЭто предварительный просмотр. Ничего не удалено.');
-      console.log('Чтобы удалить, повторите команду с флагом --apply.');
+      console.log(`Чтобы удалить, повторите команду с флагами: --db ${actualDb} --apply`);
       return;
     }
 

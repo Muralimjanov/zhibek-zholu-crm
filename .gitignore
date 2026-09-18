@@ -12,3 +12,7 @@ restored-keys*.env
 
 # Local preview config for the desktop app
 .claude/
+
+# Connection string of a remote database for ops scripts (never committed)
+.env.render
+.env.*.local

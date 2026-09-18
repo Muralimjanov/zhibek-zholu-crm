@@ -54,8 +54,10 @@ await stepUp({ action: 'booking.delete', resourceId: id, title: 'Удалени�
 
 ## Деплой (Render, бесплатно)
 
-Пока не подключён: блок статического сайта удалён из `render.yaml`. Чтобы вернуть, добавьте в `render.yaml` сервис с `runtime: static`, `rootDir: frontend`, `buildCommand: npm ci && npm run build`, `staticPublishPath: dist`, правилом rewrite `/* → /index.html` и заголовками безопасности (см. историю git, коммит 399807c).
-1. В Render → `uzz-crm-web` → Environment: `VITE_API_URL=https://<адрес uzz-crm-api>/api/v1` → Save (сайт пересоберётся).
-2. В `uzz-crm-api` → Environment: добавьте адрес сайта в `CORS_ALLOWED_ORIGINS` (через запятую, без `/` в конце).
+Сайт `uzz-crm-web` описан в `render.yaml` (статический сайт, сборка `npm ci && npm run build`, папка `dist`, rewrite `/* → /index.html`, заголовки безопасности).
+
+1. Render → Blueprints → `uzz-crm` → **Sync**: появится сервис `uzz-crm-web`.
+2. В `uzz-crm-web` → Environment: `VITE_API_URL=https://<адрес uzz-crm-api>/api/v1` → Save (сайт пересоберётся).
+3. В `uzz-crm-api` → Environment: добавьте адрес сайта в `CORS_ALLOWED_ORIGINS` (через запятую, без `/` в конце) → Save. Без этого шага браузер заблокирует все запросы к API.
 
 **Ограничение.** Сайт и API на разных доменах `*.onrender.com`. Safari (и все браузеры на iPhone) блокирует такие cookie, поэтому там после 15 минут бездействия нужно входить заново. Решение для постоянной работы — свой домен: `crm.компания.kg` для сайта и `api.компания.kg` для API.

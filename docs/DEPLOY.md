@@ -75,7 +75,7 @@ openssl rand -base64 18
 
 ## 6. Фронтенд (сайт CRM)
 
-Пока не разворачивается на Render (решение владельца 2026-09-18). Код лежит в `frontend/`, как вернуть статический сайт — в `frontend/README.md`.
+Код лежит в `frontend/`, на Render это статический сайт `uzz-crm-web` из того же `render.yaml`. После Blueprint → Sync задайте `VITE_API_URL=https://<адрес uzz-crm-api>/api/v1` в `uzz-crm-web` и добавьте адрес сайта в `CORS_ALLOWED_ORIGINS` сервиса `uzz-crm-api`. Подробности — в `frontend/README.md`.
 
 ### Правила подключения
 

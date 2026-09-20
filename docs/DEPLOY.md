@@ -75,7 +75,13 @@ openssl rand -base64 18
 
 ## 6. Фронтенд (сайт CRM)
 
-Код лежит в `frontend/`, на Render это статический сайт `uzz-crm-web` из того же `render.yaml`. После Blueprint → Sync задайте `VITE_API_URL=https://<адрес uzz-crm-api>/api/v1` в `uzz-crm-web` и добавьте адрес сайта в `CORS_ALLOWED_ORIGINS` сервиса `uzz-crm-api`. Подробности — в `frontend/README.md`.
+Код лежит в `frontend/` — приложение на Next.js. На Render это **Node-сервис** `uzz-crm-web` из того же `render.yaml` (не статический сайт: страницы договора, брони и отчёта отдаются по запросу).
+
+1. Blueprint → **Sync**. Если раньше существовал статический сайт `uzz-crm-web`, Render не сможет сменить его тип: удалите его (Settings → Delete) и синхронизируйте снова.
+2. `uzz-crm-web` → Environment: `NEXT_PUBLIC_API_URL=https://<адрес uzz-crm-api>/api/v1` → Save. Адрес вшивается в сборку, поэтому после изменения сайт пересобирается.
+3. `uzz-crm-api` → Environment: добавьте адрес сайта в `CORS_ALLOWED_ORIGINS` → Save. Без этого браузер заблокирует все запросы к API.
+
+Заголовки безопасности (CSP, запрет встраивания в чужую страницу и остальные) приложение ставит само: `frontend/next.config.ts` и `frontend/src/middleware.ts`. `connect-src` собирается из `NEXT_PUBLIC_API_URL`, поэтому при смене адреса API ничего править не нужно.
 
 ### Правила подключения
 

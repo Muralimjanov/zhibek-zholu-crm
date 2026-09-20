@@ -1,0 +1,225 @@
+@import 'tailwindcss';
+
+/*
+ * Ручное переключение темы (Системная/Светлая/Тёмная, см. ProfileScreen):
+ * `dark:*` классы по всему приложению теперь реагируют на атрибут
+ * `data-theme` на `<html>` (ставит pre-paint script в layout.tsx), а не
+ * только на `prefers-color-scheme` ОС. Тёмные токены переопределены в
+ * `:root[data-theme='dark']` ниже — без параллельной ветки внутри `@media`,
+ * иначе ручная светлая тема при тёмной ОС снова стала бы частично тёмной.
+ */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * Дизайн-система «Улуу Жибек Жолу CRM» — направление «Операционный маршрут»
+ * (CLAUDE_CRM_PREMIUM_REDESIGN_TASK.md): точность чертежа + прозрачность
+ * финансового журнала + движение сделки от брони до договора и оплаты.
+ *
+ * `brand` (бирюзовый) — единственный цвет главного действия (CTA, sidebar).
+ * Статусный смысл передаёт отдельная семья `info`/`success`/`warning`/
+ * `danger` — специально ОТДЕЛЕНА от brand, чтобы кнопка действия никогда не
+ * путалась с цветом статуса. `accent-warm` — тонкая фирменная деталь
+ * (маркер периода, точка маршрута), не для кнопок и больших заливок.
+ */
+
+:root {
+  color-scheme: light;
+
+  --background: #f4f6f3;
+  --foreground: #102127;
+  --surface: #ffffff;
+  --surface-muted: #eef2ef;
+  --surface-raised: #ffffff;
+  --muted-foreground: #647178;
+  --border-subtle: #dce4df;
+
+  /* Production build не должен зависеть от сети (fonts.googleapis.com):
+     системный стек вместо загружаемого Inter, тот же токен `--font-inter`,
+     чтобы `--font-sans` ниже не менялся. */
+  --font-inter:
+    ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+
+  /* Токены диаграмм (аналитический дашборд): продолжают текущую палитру —
+     алиасы на уже существующие `--color-*`/поверхностные токены, поэтому
+     сами по себе не нуждаются в отдельном переопределении под тёмную тему:
+     значение `var(--color-info)` и т.п. на элементе пересчитывается по
+     тому, что фактически каскадом действует в `:root[data-theme='dark']`. */
+  --chart-brand: var(--color-brand-600);
+  --chart-info: var(--color-info);
+  --chart-warm: var(--color-accent-warm);
+  --chart-success: var(--color-success);
+  --chart-danger: var(--color-danger);
+  --chart-grid: var(--border-subtle);
+  --chart-axis: var(--muted-foreground);
+  --chart-tooltip-bg: var(--surface-raised);
+}
+
+@theme {
+  /* Бренд/CTA — бирюзовый. Полная шкала нужна для pastel-фонов (badge,
+     активный пункт меню); светлый и тёмный режим переключают её через
+     разные ступени, поэтому сама шкала статична. */
+  --color-brand-50: #eaf7f4;
+  --color-brand-100: #d2eee8;
+  --color-brand-200: #a9ded2;
+  --color-brand-300: #7ecabc;
+  --color-brand-400: #4fb0a0;
+  --color-brand-500: #269284;
+  --color-brand-600: #0f766e;
+  --color-brand-700: #0b615b;
+  --color-brand-800: #0a4e49;
+  --color-brand-900: #123b3a;
+  --color-brand-950: #082220;
+
+  /* Единичная фирменная деталь (маркер периода, точка на линии маршрута) —
+     не для кнопок и больших заливок (см. дизайн-контракт, п.3). */
+  --color-accent-warm: #c68a2b;
+
+  /* Текст поверх `bg-accent-warm` (номер станции в «Маршруте продаж»):
+     белый на золоте даёт только ~2.97:1 (light) и ~2.26:1 (dark) — ниже
+     WCAG AA. Тёмный `#081e1d` (тот же цвет, что и `on-brand` в тёмной теме)
+     даёт ~5.8:1 на светлом accent-warm и ~7.7:1 на тёмном — верно для обеих
+     тем сразу, отдельного переопределения под `data-theme='dark'` не нужно. */
+  --color-on-accent-warm: #081e1d;
+
+  /* Текст поверх сплошной заливки `bg-brand-*`: белый читается на светлом
+     `brand-600`, но даёт только ~2.96:1 на ярком тёмном `brand-600` — там
+     нужен тёмный текст (см. переопределение под тёмную тему ниже). */
+  --color-on-brand: #ffffff;
+
+  /* Статусный смысл — отдельно от brand. Значение переопределяется под
+     тёмную тему ниже, поэтому в JSX используются как обычные классы
+     (`text-info`, `bg-danger`) без ручного `dark:`-варианта. Каждая пара
+     сверена с реальным фоном пилюли в Badge.tsx на контраст ≥4.5:1 при
+     12px-тексте. */
+  --color-info: #2563eb;
+  --color-success: #15803d;
+  --color-warning: #ad520f;
+  --color-danger: #b42318;
+
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
+  /* Типографическая шкала дизайн-контракта (п.3): заголовок страницы,
+     заголовок секции, основной текст, подпись, крупный KPI. */
+  --text-page-title: 1.5rem;
+  --text-page-title--line-height: 1.875rem;
+  --text-section-title: 1rem;
+  --text-section-title--line-height: 1.5rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.3125rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.125rem;
+  --text-kpi: 1.75rem;
+  --text-kpi--line-height: 2.125rem;
+  --text-kpi-mobile: 1.5rem;
+  --text-kpi-mobile--line-height: 1.875rem;
+
+  /* Геометрия: поле/кнопка — 10px, карточка — 14px, modal/popover — 16px. */
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-modal: 16px;
+
+  /* Единая шкала «приподнятости» вместо случайных box-shadow по компонентам;
+     тени очень мягкие — разделение создают в первую очередь фон и границы. */
+  --shadow-xs: 0 1px 2px 0 rgb(16 33 39 / 0.04);
+  --shadow-sm:
+    0 1px 3px 0 rgb(16 33 39 / 0.06), 0 1px 2px -1px rgb(16 33 39 / 0.05);
+  --shadow-md:
+    0 4px 12px -2px rgb(16 33 39 / 0.07), 0 2px 6px -2px rgb(16 33 39 / 0.04);
+  --shadow-lg:
+    0 12px 24px -6px rgb(16 33 39 / 0.1), 0 4px 10px -4px rgb(16 33 39 / 0.05);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-raised: var(--surface-raised);
+  --color-muted: var(--muted-foreground);
+  --color-border-subtle: var(--border-subtle);
+}
+
+/*
+ * Ручная тёмная тема (не `@media`): `data-theme='dark'` ставит pre-paint
+ * script по сохранённому предпочтению (light/dark/system — см.
+ * `src/lib/theme.ts`), поэтому сама разметка не завязана на ОС напрямую.
+ * Одна ветка тёмных токенов — вторая конкурирующая внутри `@media` заставила
+ * бы светлую тему при тёмной ОС снова частично потемнеть.
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --background: #0c1416;
+  --foreground: #ecf4f1;
+  --surface: #111d20;
+  --surface-muted: #0d1719;
+  --surface-raised: #172529;
+  --muted-foreground: #97aaa5;
+  --border-subtle: #26373a;
+
+  /* Полноценная тёмная тема, не инверсия: brand ярче для контраста на
+     тёмном фоне (диапазон #2AA79C–#64C5BA из дизайн-контракта), деталь
+     и статусы тоже приподняты на 1–2 ступени яркости под WCAG AA.
+     `on-brand` тёмный: белый на ярком тёмном `brand-600` даёт только
+     ~2.96:1, а `#081E1D` — ~5.9:1. `brand-700` (hover) взят на верхней
+     границе диапазона — на тёмном фоне ховер должен светлеть, а не
+     темнеть, иначе тёмный `on-brand`-текст проваливается ниже 4.5:1. */
+  --color-brand-600: #2aa79c;
+  --color-brand-700: #64c5ba;
+  --color-brand-900: #081e1d;
+  --color-on-brand: #081e1d;
+  --color-accent-warm: #d9a34f;
+  --color-info: #60a5fa;
+  --color-success: #22c55e;
+  --color-warning: #e8a33d;
+  --color-danger: #f87171;
+
+  /* Те же имена переменных — утилиты shadow-* подхватывают тёмные значения сами. */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-md:
+    0 4px 12px -2px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg:
+    0 12px 24px -6px rgb(0 0 0 / 0.55), 0 4px 10px -4px rgb(0 0 0 / 0.35);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Видимый фокус только при навигации с клавиатуры. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Короткий входной переход узлов «Маршрута продаж» при первом появлении (160–220ms из задания); `prefers-reduced-motion` ниже уже гасит любую anim-duration до 0.01ms. */
+@keyframes route-node-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

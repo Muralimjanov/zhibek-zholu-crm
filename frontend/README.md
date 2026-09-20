@@ -1,63 +1,141 @@
-# CRM «Улуу Жибек Жолу» — фронтенд
+# Улуу Жибек Жолу CRM
 
-React 18 + Vite + TypeScript, Tailwind CSS 4, Radix UI, TanStack Query, React Hook Form + Zod, Recharts. Интерфейс на русском, светлая и тёмная темы, адаптив от 375 px.
+Frontend CRM на Next.js (App Router), TypeScript и Tailwind CSS.
 
-Дизайн-система (ui-ux-pro-max): плотный дашборд, бирюзовый основной цвет (доверие), синий акцент, семантические цвета статусов с текстом (не только цвет), шрифты Fira Sans / Fira Code (кириллица, свои файлы — без внешних запросов), иконки Lucide, контраст текста ≥ 4.5:1, `prefers-reduced-motion`, фокус с клавиатуры, ссылка «К содержимому».
+## Требования
+
+- Node.js 20.9 или новее для запуска приложения; для `npm test` нужен
+  Node.js 22.6 или новее (`--experimental-strip-types`)
+- npm (lockfile проекта рассчитан на npm)
 
 ## Запуск
 
-```bash
-cd frontend
+```powershell
 npm install
-cp .env.example .env.local   # VITE_API_URL=http://localhost:3000/api/v1
-npm run dev                  # http://localhost:5173
+Copy-Item .env.example .env.local
+npm run dev
 ```
 
-Бэкенду нужен `CORS_ALLOWED_ORIGINS=http://localhost:5173`, а для кодов из писем — Mailpit (`dev-tools/mailpit/README.md`).
+Откройте `http://localhost:3000`.
 
-```bash
-npm test          # unit-тесты (деньги, ошибки, обновление сессии)
-npm run build     # проверка типов + сборка в dist/
-npm run preview   # сборка с теми же заголовками безопасности, что на Render
+`NEXT_PUBLIC_API_URL` — публичный адрес API. Значения с префиксом
+`NEXT_PUBLIC_` попадают в браузер, поэтому не добавляйте в них пароли,
+токены, cookie или bootstrap-секреты.
+
+## Проверки
+
+```powershell
+npm run lint
+npm run typecheck
+npm test
+npm run format:check
+npm run build
 ```
 
-## Как устроено
+Автоматически привести код к стилю можно командой `npm run format`.
 
-| Что | Где |
-|---|---|
-| API-клиент: токен в памяти, обновление сессии, CSRF, ошибки | `src/api/client.ts` |
-| Все эндпоинты и типы ответов | `src/api/endpoints.ts`, `src/api/types.ts` |
-| Сессия, согласия, выход во всех вкладках | `src/auth/AuthProvider.tsx` |
-| Коды подтверждения важных действий | `src/auth/StepUpProvider.tsx` → `useStepUp()` |
-| Меню по ролям (ТЗ «Экраны по ролям») | `src/layout/nav.ts` |
-| Страницы | `src/pages/**` |
+## Структура
 
-**Безопасность**
-- Access token только в памяти вкладки. Refresh token — HttpOnly-cookie бэкенда.
-- CSRF-токен хранится в `localStorage`: без HttpOnly refresh-cookie он бесполезен, а нужен, чтобы пережить перезагрузку при API на другом домене.
-- Refresh-токены одноразовые, повторное использование завершает сессию. Поэтому обновление сериализуется между вкладками через Web Locks.
-- Никакого `dangerouslySetInnerHTML`. Юридические документы рендерятся как текст.
-- Файлы (договоры, чеки, аватары) скачиваются с заголовком `Authorization` в blob и не попадают в URL.
-- Строгий CSP без внешних доменов (`render.yaml`). Если меняется встроенный скрипт темы в `index.html`, нужно обновить его sha256 в `render.yaml` и `vite.config.ts`.
-- Права проверяет сервер. Фронт только скрывает недоступное.
-
-**Деньги.** Суммы приходят строками в тыйынах и считаются через `BigInt` (`src/lib/money.ts`), без float. Пользователь вводит сомы, например `15 000,50`.
-
-**Коды подтверждения.**
-
-```ts
-const stepUp = useStepUp();
-await stepUp({ action: 'booking.delete', resourceId: id, title: 'Удаление брони', run: (headers) => bookingsApi.remove(id, headers) })
-  .then(() => toast.success('Удалено'))
-  .catch(() => undefined); // отмену, неверный код и ошибки уже показал диалог
+```text
+src/
+├── app/          # маршруты и layout'ы Next.js
+├── components/   # переиспользуемые UI- и layout-компоненты
+├── features/     # модули предметной области
+├── hooks/        # переиспользуемые React hooks
+├── lib/          # утилиты, константы и инфраструктура
+└── types/        # общие TypeScript-типы
 ```
 
-## Деплой (Render, бесплатно)
+Клиентские провайдеры находятся в `src/components/providers`. Используйте
+alias `@/` для импортов из `src`, например
+`import { APP_NAME } from '@/lib/constants'`.
 
-Сайт `uzz-crm-web` описан в `render.yaml` (статический сайт, сборка `npm ci && npm run build`, папка `dist`, rewrite `/* → /index.html`, заголовки безопасности).
+## Авторизация
 
-1. Render → Blueprints → `uzz-crm` → **Sync**: появится сервис `uzz-crm-web`.
-2. В `uzz-crm-web` → Environment: `VITE_API_URL=https://<адрес uzz-crm-api>/api/v1` → Save (сайт пересоберётся).
-3. В `uzz-crm-api` → Environment: добавьте адрес сайта в `CORS_ALLOWED_ORIGINS` (через запятую, без `/` в конце) → Save. Без этого шага браузер заблокирует все запросы к API.
+Реализованы вход, восстановление сессии, выход, текущий
+пользователь, защита внутренних страниц и обязательные согласия.
 
-**Ограничение.** Сайт и API на разных доменах `*.onrender.com`. Safari (и все браузеры на iPhone) блокирует такие cookie, поэтому там после 15 минут бездействия нужно входить заново. Решение для постоянной работы — свой домен: `crm.компания.kg` для сайта и `api.компания.kg` для API.
+- Маршруты входа и согласий: `/login`, `/consents`.
+- Access token живёт только в памяти. В `sessionStorage` сохраняется
+  единственное значение — `csrfToken` (ключ `uzz-crm.csrf-token`), чтобы
+  восстановить сессию после обновления вкладки.
+- При загрузке приложения: если csrf-токен есть, выполняется один
+  `POST /auth/refresh`, затем `GET /auth/me` и `GET /consents/status`.
+  Новая вкладка без csrf-токена требует повторного входа.
+- Все параллельные 401 разделяют один `POST /auth/refresh`; после него запрос
+  повторяется ровно один раз.
+- До окончания проверки сессии защищённые страницы показывают нейтральный
+  экран загрузки. Источник истины по правам остаётся на backend.
+- Код сессии: `src/features/auth`, документы и согласия:
+  `src/features/legal`, общий транспорт: `src/lib/api/client.ts`.
+
+## Пользователи и создание аккаунтов
+
+Раздел `/users`: список сотрудников, запрос на создание аккаунта и
+подтверждение запроса директором.
+
+- В меню он показан директору как «Пользователи», начальнику продаж как
+  «Команда»; остальным ролям пункт не виден, а прямой переход показывает
+  «Нет доступа». Права всё равно проверяет backend.
+- `POST /confirmations/users` возвращает 202 — это **только запрос**.
+  Аккаунт появляется после `POST /confirmations/{id}/confirm`, который
+  отвечает 201 с созданным пользователем.
+- На `/confirmations/{id}/confirm` код 401 означает **неверный код**, а не
+  истёкшую сессию, поэтому этот запрос не проходит через общий разбор 401 в
+  `authorizedRequest`.
+- Поля элемента `GET /confirmations/pending` в OpenAPI не описаны; типы в
+  `src/types/users.ts` взяты из фактического ответа staging: `id`, `type`,
+  `status`, `summary`, `createdAt`, `expiresAt`, `initiatorUserId`.
+- Статус доставки письма читается только по известным признакам ответа;
+  неизвестное значение не показывается как успешная доставка.
+
+## Рабочие разделы
+
+- `/dashboard` — сводка компании для директора и инвестора; для остальных
+  ролей — ссылки на доступные разделы.
+- `/bookings` и `/contracts` — продажи, карточки и действия согласно роли.
+- `/shifts` — смены и выходные.
+- `/payroll` — начисления и настройки зарплаты.
+- `/finance` — операции, сводка и вложения бухгалтерии.
+- `/reports` — архив ежедневных отчётов и аналитика продаж для доступных ролей.
+
+Форма ответов и проверенные роли зафиксированы в `*_API_EXAMPLES.md`,
+`REPORTS_API_RESEARCH.md` и `E2E_ACCEPTANCE_REVIEW.md`. Для отчётов архив с
+несколькими страницами (больше одного `limit`) пока не встречался живьём —
+пагинация проверена только по логике кода и одностраничным ответам.
+
+## Правила проекта
+
+- По умолчанию компоненты App Router остаются серверными. Добавляйте
+  `'use client'` только когда нужны состояние, эффекты или browser API.
+- Общий UI размещайте в `components/ui`, а код конкретного домена — в его
+  папке внутри `features`.
+- Авторизацию подключайте к API по контракту из
+  `FRONTEND_ARCHITECTURE.md`. Проверено 17.09.2026: неверный вход
+  возвращает 401 `AUTH_INVALID_CREDENTIALS`, успешный вход под демо-аккаунтом
+  отдаёт профиль, обновление вкладки восстанавливает сессию одним
+  `refresh` → `me` → `consents/status`, выход очищает состояние.
+- Не коммитьте `.env.local`: шаблон переменных лежит в `.env.example`.
+
+## Деплой (Render)
+
+Сервис `uzz-crm-web` описан в `render.yaml` в корне репозитория: Node-сервис,
+`rootDir: frontend`, сборка `npm ci && npm run build`, запуск `npm run start`.
+Статикой приложение отдать нельзя — страницы `/bookings/[id]`,
+`/contracts/[id]` и `/reports/[id]` рендерятся по запросу.
+
+1. Render → Blueprints → **Sync**.
+2. `uzz-crm-web` → Environment: `NEXT_PUBLIC_API_URL=https://<адрес API>/api/v1`.
+3. `uzz-crm-api` → Environment: адрес сайта в `CORS_ALLOWED_ORIGINS`.
+
+## Заголовки безопасности
+
+`next.config.ts` ставит `X-Frame-Options`, `X-Content-Type-Options`,
+`Referrer-Policy`, `Permissions-Policy` и `Strict-Transport-Security` и
+убирает `X-Powered-By`. `src/middleware.ts` добавляет Content-Security-Policy:
+чужие скрипты не загружаются, а `connect-src` разрешает запросы только к
+своему источнику и к адресу из `NEXT_PUBLIC_API_URL`, поэтому увести данные
+на посторонний домен нельзя. `'unsafe-inline'` для скриптов оставлен
+вынужденно: Next встраивает свои inline-скрипты в статически отрендеренные
+страницы, а одноразовый nonce для них недоступен (проверено вживую —
+с nonce блокируются все чанки и приложение не запускается).

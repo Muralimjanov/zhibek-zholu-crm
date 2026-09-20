@@ -80,7 +80,17 @@ export function configureApp(app: INestApplication): void {
  * of SWAGGER_ENABLED: a public schema is free reconnaissance for an attacker.
  */
 function setupSwagger(app: INestApplication, config: AppConfigService): void {
-  const document = SwaggerModule.createDocument(
+  SwaggerModule.setup(`${config.apiPrefix}/${SWAGGER_PATH}`, app, buildOpenApiDocument(app), {
+    swaggerOptions: { persistAuthorization: false },
+  });
+}
+
+/**
+ * The published API surface. Exported so the route-coverage test can assert
+ * that every documented route is actually exercised against a real database.
+ */
+export function buildOpenApiDocument(app: INestApplication) {
+  return SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
       .setTitle('Uluu Zhibek Zholu CRM API')
@@ -101,7 +111,4 @@ function setupSwagger(app: INestApplication, config: AppConfigService): void {
       .addBearerAuth()
       .build(),
   );
-  SwaggerModule.setup(`${config.apiPrefix}/${SWAGGER_PATH}`, app, document, {
-    swaggerOptions: { persistAuthorization: false },
-  });
 }

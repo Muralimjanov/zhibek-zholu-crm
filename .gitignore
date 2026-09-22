@@ -16,3 +16,6 @@ restored-keys*.env
 # Connection string of a remote database for ops scripts (never committed)
 .env.render
 .env.*.local
+
+# Ролик-обзор: готовый файл и его исходники лежат локально, в репозитории не нужны
+brag-output/

@@ -23,6 +23,9 @@ enum UserRole {
   sales_manager
   accountant
   investor
+  // Ресепшен: регистрирует обращения по телефону и на месте. Видит только
+  // форму лида и свои записи, ни к продажам, ни к деньгам доступа не имеет.
+  reception
 }
 
 enum UserStatus {
@@ -165,6 +168,8 @@ model User {
   transactions    Transaction[]  @relation("TransactionCreator")
   uploadedFiles   StoredFile[]   @relation("FileUploader")
   emailCodes      EmailCode[]
+  createdLeads    Lead[]         @relation("LeadCreatedBy")
+  assignedLeads   Lead[]         @relation("LeadManager")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -368,6 +373,8 @@ model Booking {
   buyerConsentRecordedById String
 
   contract  Contract?
+  // Бронь может вырасти из лида, зарегистрированного ресепшеном.
+  lead      Lead?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -541,4 +548,63 @@ model DailyReport {
 
   @@unique([type, date])
   @@index([date])
+}
+
+/// Обращение, зарегистрированное ресепшеном: первый шаг воронки
+/// лид → бронь → договор. Начальник продаж назначает менеджера, менеджер
+/// превращает лид в бронь.
+enum LeadStatus {
+  /// Зарегистрирован, менеджер ещё не назначен.
+  new
+  /// Начальник продаж назначил менеджера.
+  assigned
+  /// Превращён в бронь (bookingId заполнен).
+  converted
+  /// Клиент отказался или обращение нецелевое.
+  rejected
+}
+
+model Lead {
+  id String @id @default(uuid())
+
+  // Персональные данные клиента шифруются так же, как у брони
+  // (FieldCipher, контексты Lead.*). Телефон дополнительно хранит слепой
+  // индекс, чтобы искать точным совпадением, не расшифровывая базу.
+  firstNameEnc String
+  lastNameEnc  String
+  phoneEnc     String
+  phoneIdx     String
+  commentEnc   String?
+
+  /// Сколько квадратных метров нужно клиенту.
+  desiredAreaSqm Decimal    @db.Decimal(12, 2)
+  status         LeadStatus @default(new)
+
+  /// Кто зарегистрировал обращение (ресепшен).
+  createdById String
+  createdBy   User   @relation("LeadCreatedBy", fields: [createdById], references: [id])
+
+  /// Менеджер, которого назначил начальник продаж.
+  assignedManagerId String?
+  assignedManager   User?     @relation("LeadManager", fields: [assignedManagerId], references: [id], onDelete: SetNull)
+  assignedAt        DateTime?
+
+  // Согласие клиента на обработку персональных данных: подтверждается на
+  // самой форме, до того как эти данные попадут в базу.
+  buyerConsentVersion      String
+  buyerConsentConfirmedAt  DateTime
+  buyerConsentRecordedById String
+
+  /// Заполняется, когда лид превращён в бронь.
+  bookingId String?  @unique
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([assignedManagerId])
+  @@index([createdById])
+  @@index([phoneIdx])
+  @@index([createdAt])
 }

@@ -62,6 +62,21 @@ export function computePayroll(base: bigint, missed: number, finePerMissed: bigi
 
 type EntryWithUser = PayrollEntry & { user: Pick<User, 'fullName' | 'role'> };
 
+export interface PayrollSummaryResponse {
+  period: string;
+  employeeCount: number;
+  draftCount: number;
+  confirmedCount: number;
+  totals: {
+    baseSalaryTyiyn: string;
+    fineAmountTyiyn: string;
+    taxAmountTyiyn: string;
+    finalAmountTyiyn: string;
+  };
+  missedShiftsTotal: number;
+  entries: PayrollEntryResponse[];
+}
+
 @Injectable()
 export class PayrollService {
   constructor(
@@ -238,6 +253,36 @@ export class PayrollService {
     return rows.map((r) => this.toResponse(r));
   }
 
+  /**
+   * Сводка по зарплате за месяц для раздела отчётности. Решение владельца
+   * 22.09.2026: видит только директор. Даёт то, чего нет в списке начислений —
+   * итоги по фонду, налогу и штрафам, и сколько начислений ещё черновики.
+   */
+  async summary(actor: AuthenticatedUser, period: string): Promise<PayrollSummaryResponse> {
+    if (actor.role !== UserRole.director) throw new ForbiddenException('AUTH_FORBIDDEN');
+    const rows = await this.prisma.payrollEntry.findMany({
+      where: { period },
+      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+      include: { user: { select: { fullName: true, role: true } } },
+    });
+
+    const sum = (pick: (e: PayrollEntry) => bigint) => rows.reduce((total, e) => total + pick(e), 0n);
+    return {
+      period,
+      employeeCount: rows.length,
+      draftCount: rows.filter((e) => e.status === PayrollEntryStatus.draft).length,
+      confirmedCount: rows.filter((e) => e.status === PayrollEntryStatus.confirmed).length,
+      totals: {
+        baseSalaryTyiyn: sum((e) => e.baseSalaryTyiyn).toString(),
+        fineAmountTyiyn: sum((e) => e.fineAmountTyiyn).toString(),
+        taxAmountTyiyn: sum((e) => e.taxAmountTyiyn).toString(),
+        finalAmountTyiyn: sum((e) => e.finalAmountTyiyn).toString(),
+      },
+      missedShiftsTotal: rows.reduce((total, e) => total + e.missedShiftsCount, 0),
+      entries: rows.map((r) => this.toResponse(r)),
+    };
+  }
+
   async get(actor: AuthenticatedUser, id: string): Promise<PayrollEntryResponse> {
     const entry = await this.prisma.payrollEntry.findFirst({
       where: { id, ...this.scope(actor) },
@@ -293,12 +338,9 @@ export class PayrollService {
     return this.get(actor, id);
   }
 
-  async remove(actor: AuthenticatedUser, id: string, ctx: RequestContext): Promise<void> {
-    const entry = await this.prisma.payrollEntry.findUnique({ where: { id } });
-    if (!entry) throw new NotFoundException('PAYROLL_ENTRY_NOT_FOUND');
-    await this.prisma.payrollEntry.delete({ where: { id } });
-    await this.auditEntry(actor, AuditAction.PAYROLL_ENTRY_DELETED, entry, ctx);
-  }
+  // remove() удалён 22.09.2026 вместе с эндпоинтом: удаление начисления было
+  // только у директора. Черновик правится через update(), подтверждённое
+  // начисление остаётся в истории.
 
   private auditEntry(actor: AuthenticatedUser, action: AuditAction, e: PayrollEntry, ctx: RequestContext, extra?: Record<string, unknown>) {
     return this.audit.record({

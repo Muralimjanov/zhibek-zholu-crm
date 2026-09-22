@@ -161,13 +161,15 @@ describe('Sales — real PostgreSQL', () => {
       expect(evil.status).toBe(400);
     });
 
-    it('manager cannot assign bookings to someone else or delete; head of sales / director can', async () => {
+    it('manager cannot assign bookings to someone else or delete; only the head of sales can', async () => {
       expect((await http().post(`${API}/bookings`).set(...bearer(s.smA1)).send(bookingBody({ managerId: smA2.id }))).status).toBe(403);
       expect((await http().post(`${API}/bookings`).set(...bearer(s.hosA)).send(bookingBody({ managerId: smB.id }))).status).toBe(403);
-      expect((await http().post(`${API}/bookings`).set(...bearer(s.director)).send(bookingBody())).status).toBe(400);
+      // Решение владельца 22.09.2026: у директора нет никакого редактирования.
+      expect((await http().post(`${API}/bookings`).set(...bearer(s.director)).send(bookingBody())).status).toBe(403);
 
       const booking = await createBooking(s.smA1);
       expect((await http().delete(`${API}/bookings/${booking.id}`).set(...bearer(s.smA1))).status).toBe(403);
+      expect((await http().delete(`${API}/bookings/${booking.id}`).set(...bearer(s.director))).status).toBe(403);
       expect((await http().delete(`${API}/bookings/${booking.id}`).set(...bearer(s.hosB))).status).toBe(404);
       expect((await http().delete(`${API}/bookings/${booking.id}`).set(...bearer(s.hosA))).status).toBe(204);
       expect(await prisma.booking.count()).toBe(0);
@@ -214,7 +216,7 @@ describe('Sales — real PostgreSQL', () => {
     it('concurrent conversions of one booking create exactly one contract', async () => {
       const booking = await createBooking(s.smA1);
       const results = await Promise.all(
-        [s.smA1, s.hosA, s.director].map((session) =>
+        [s.smA1, s.hosA, s.smA1].map((session) =>
           http()
             .post(`${API}/bookings/${booking.id}/convert`)
             .set(...bearer(session))
@@ -244,7 +246,7 @@ describe('Sales — real PostgreSQL', () => {
       return res.body as { id: string };
     }
 
-    it('direct contract: managerId rule per role (director required, head of sales optional within team, manager self only)', async () => {
+    it('direct contract: managerId rule per role (director forbidden, head of sales optional within team, manager self only)', async () => {
       const body = (managerId?: string) => ({
         fullName: 'Асанов Бакыт',
         passportNumber: 'ID 1234567',
@@ -257,12 +259,9 @@ describe('Sales — real PostgreSQL', () => {
       });
       const post = (session: Session, managerId?: string) => http().post(`${API}/contracts`).set(...bearer(session)).send(body(managerId));
 
-      // Director: required, any active seller.
-      const dirMissing = await post(s.director);
-      expect([dirMissing.status, dirMissing.body.message]).toEqual([400, 'MANAGER_ID_REQUIRED']);
-      expect((await post(s.director, smB.id)).body.managerId).toBe(smB.id);
-      expect((await post(s.director, hosA.id)).body.managerId).toBe(hosA.id);
-      expect((await post(s.director, accountant.id)).body.message).toBe('MANAGER_INVALID');
+      // Директор договоры больше не заводит (решение владельца 22.09.2026).
+      expect((await post(s.director)).status).toBe(403);
+      expect((await post(s.director, smB.id)).status).toBe(403);
 
       // Head of sales: defaults to self; own team allowed; another team forbidden.
       expect((await post(s.hosA)).body.managerId).toBe(hosA.id);
@@ -411,11 +410,12 @@ describe('Sales — real PostgreSQL', () => {
       await expect(prisma.contract.update({ where: { id: contract.id }, data: { totalAmountTyiyn: -1n } })).rejects.toThrow();
     });
 
-    it('delete: director/head of sales only; the encrypted file is removed too', async () => {
+    it('delete: head of sales only; the encrypted file is removed too', async () => {
       const contract = await createContract(s.smA1);
       await http().put(`${API}/contracts/${contract.id}/file`).set(...bearer(s.smA1)).attach('file', PDF, 'c.pdf').expect(200);
       expect((await http().delete(`${API}/contracts/${contract.id}`).set(...bearer(s.smA1))).status).toBe(403);
-      expect((await http().delete(`${API}/contracts/${contract.id}`).set(...bearer(s.director))).status).toBe(204);
+      expect((await http().delete(`${API}/contracts/${contract.id}`).set(...bearer(s.director))).status).toBe(403);
+      expect((await http().delete(`${API}/contracts/${contract.id}`).set(...bearer(s.hosA))).status).toBe(204);
       expect(await prisma.storedFile.count()).toBe(0);
     });
   });

@@ -91,7 +91,7 @@ describe('Accounting, dashboard and security — real PostgreSQL', () => {
       expect((await http().get(`${API}/transactions`).set(...bearer(s.director))).body.total).toBe(1);
     });
 
-    it('closed period locks edits for the accountant; director may still delete; own records only', async () => {
+    it('closed period locks edits for the accountant; the director cannot touch operations at all; own records only', async () => {
       const t = await tx(s.accountant, { date: prevMonthDay() });
       const foreign = await tx(s.accountant2, {});
       expect((await http().patch(`${API}/transactions/${foreign.body.id}`).set(...bearer(s.accountant)).send({ amountTyiyn: '1' })).status).toBe(403);
@@ -109,8 +109,11 @@ describe('Accounting, dashboard and security — real PostgreSQL', () => {
       const current = await tx(s.accountant, {});
       expect((await http().patch(`${API}/transactions/${current.body.id}`).set(...bearer(s.accountant)).send({ date: prevMonthDay() })).status).toBe(409);
 
+      // Решение владельца 22.09.2026: у директора нет ни правки, ни удаления
+      // операций — запись в закрытом месяце не может изменить никто.
       expect((await http().patch(`${API}/transactions/${t.body.id}`).set(...bearer(s.director)).send({ amountTyiyn: '1' })).status).toBe(403);
-      expect((await http().delete(`${API}/transactions/${t.body.id}`).set(...bearer(s.director))).status).toBe(204);
+      expect((await http().delete(`${API}/transactions/${t.body.id}`).set(...bearer(s.director))).status).toBe(403);
+      expect(await prisma.transaction.count({ where: { id: t.body.id } })).toBe(1);
     });
 
     it('receipt attachment is private: director/accountant download with safe headers', async () => {

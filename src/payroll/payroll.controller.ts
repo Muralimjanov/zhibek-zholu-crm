@@ -13,7 +13,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequireEmailCode } from '../email-codes/require-email-code.decorator';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
@@ -21,7 +21,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ctxOf } from '../common/request-context';
-import { GeneratePayrollDto, ListPayrollQueryDto, PayrollSettingsDto, UpdatePayrollEntryDto } from './payroll.dto';
+import { GeneratePayrollDto, ListPayrollQueryDto, PayrollSettingsDto, PayrollSummaryQueryDto, UpdatePayrollEntryDto } from './payroll.dto';
 import { PayrollService } from './payroll.service';
 
 @ApiTags('payroll')
@@ -48,6 +48,18 @@ export class PayrollController {
   @HttpCode(HttpStatus.OK)
   generate(@CurrentUser() actor: AuthenticatedUser, @Body() dto: GeneratePayrollDto, @Req() req: Request) {
     return this.payroll.generate(actor, dto.period, ctxOf(req));
+  }
+
+  @ApiOperation({
+    summary: 'Сводка по зарплате за месяц (отчётность директора)',
+    description:
+      'Итоги по фонду оплаты труда, налогу, штрафам и прогулам за период плюс ' +
+      'построчные начисления. Только директор (решение владельца 22.09.2026).',
+  })
+  @Roles(UserRole.director)
+  @Get('summary')
+  summary(@CurrentUser() actor: AuthenticatedUser, @Query() query: PayrollSummaryQueryDto) {
+    return this.payroll.summary(actor, query.period);
   }
 
   /** Sales managers see only their own entries ("Моя зарплата"). */
@@ -82,11 +94,7 @@ export class PayrollController {
     return this.payroll.confirm(actor, id, ctxOf(req));
   }
 
-  @Roles(UserRole.director)
-  @RequireEmailCode('payroll.delete')
-  @Delete('entries/:id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@CurrentUser() actor: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
-    await this.payroll.remove(actor, id, ctxOf(req));
-  }
+  // Удаление начисления было только у директора и убрано вместе с остальным
+  // его редактированием (решение владельца 22.09.2026). Ошибочный черновик
+  // бухгалтер правит через PATCH, подтверждённый остаётся в истории.
 }

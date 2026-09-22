@@ -30,6 +30,8 @@ import { CreateContractDto, ListContractsQueryDto, MarkDepositDto, UpdateContrac
 import { ContractsService } from './contracts.service';
 
 const SELLERS = [UserRole.director, UserRole.head_of_sales, UserRole.sales_manager];
+/** Запись: без директора — у него осталась только отчётность и аккаунты. */
+const SELLER_EDITORS = [UserRole.head_of_sales, UserRole.sales_manager];
 
 @ApiTags('contracts')
 @ApiBearerAuth()
@@ -44,7 +46,7 @@ export class ContractsController {
   @ApiResponse({ status: 201, description: 'Договор создан; суммы рассчитаны сервером' })
   @ApiResponse({ status: 400, description: 'Валидация; MANAGER_ID_REQUIRED (director без managerId); MANAGER_INVALID (не активный продавец)' })
   @ApiResponse({ status: 403, description: 'AUTH_FORBIDDEN: роль без права или managerId вне допустимых (см. описание поля managerId); CONSENT_REQUIRED' })
-  @Roles(...SELLERS)
+  @Roles(...SELLER_EDITORS)
   @Post()
   create(@CurrentUser() actor: AuthenticatedUser, @Body() dto: CreateContractDto, @Req() req: Request) {
     return this.contracts.create(actor, dto, ctxOf(req));
@@ -69,7 +71,7 @@ export class ContractsController {
     status: 403,
     description: 'AUTH_FORBIDDEN: роль без права или managerId вне допустимых (см. описание поля managerId); CONTRACT_SIGNED_READ_ONLY: менеджер правит подписанный договор; CONSENT_REQUIRED',
   })
-  @Roles(...SELLERS)
+  @Roles(...SELLER_EDITORS)
   @Patch(':id')
   update(
     @CurrentUser() actor: AuthenticatedUser,
@@ -80,7 +82,7 @@ export class ContractsController {
     return this.contracts.update(actor, id, dto, ctxOf(req));
   }
 
-  @Roles(...SELLERS, UserRole.accountant)
+  @Roles(...SELLER_EDITORS, UserRole.accountant)
   @RequireEmailCode('contract.deposit')
   @Post(':id/deposit')
   markDeposit(
@@ -93,7 +95,7 @@ export class ContractsController {
   }
 
   /** Upload/replace the signed contract document (PDF, JPEG or PNG). */
-  @Roles(...SELLERS)
+  @Roles(...SELLER_EDITORS)
   @RequireEmailCode('contract.file')
   @Put(':id/file')
   @UseInterceptors(FileInterceptor('file'))
@@ -120,7 +122,7 @@ export class ContractsController {
     return sendPrivateFile(res, file, { baseName: `contract-${id}` });
   }
 
-  @Roles(UserRole.director, UserRole.head_of_sales)
+  @Roles(UserRole.head_of_sales)
   @RequireEmailCode('contract.delete')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)

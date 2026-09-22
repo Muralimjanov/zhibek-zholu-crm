@@ -58,25 +58,10 @@ export class ShiftsController {
     return this.shifts.list(actor, query);
   }
 
-  @Roles(UserRole.director)
-  @RequireEmailCode('shift.update')
-  @Patch(':id')
-  correct(
-    @CurrentUser() actor: AuthenticatedUser,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CorrectShiftDto,
-    @Req() req: Request,
-  ) {
-    return this.shifts.correct(actor, id, dto, ctxOf(req));
-  }
-
-  @Roles(UserRole.director)
-  @RequireEmailCode('shift.delete')
-  @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@CurrentUser() actor: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
-    await this.shifts.remove(actor, id, ctxOf(req));
-  }
+  // Правка и удаление смены были только у директора. Решение владельца
+  // 22.09.2026: у директора остаётся отчётность и создание аккаунтов,
+  // остальное редактирование убрано и никому не передано — записи смен
+  // теперь неизменны после закрытия.
 }
 
 @ApiTags('day-offs')
@@ -85,7 +70,7 @@ export class ShiftsController {
 export class DayOffsController {
   constructor(private readonly dayOffs: DayOffsService) {}
 
-  @Roles(UserRole.director, UserRole.head_of_sales)
+  @Roles(UserRole.head_of_sales)
   @Post()
   create(@CurrentUser() actor: AuthenticatedUser, @Body() dto: CreateDayOffDto, @Req() req: Request) {
     return this.dayOffs.create(actor, dto, ctxOf(req));
@@ -97,7 +82,7 @@ export class DayOffsController {
     return this.dayOffs.list(actor, query);
   }
 
-  @Roles(UserRole.director, UserRole.head_of_sales)
+  @Roles(UserRole.head_of_sales)
   @Patch(':id')
   update(
     @CurrentUser() actor: AuthenticatedUser,
@@ -108,7 +93,7 @@ export class DayOffsController {
     return this.dayOffs.update(actor, id, dto, ctxOf(req));
   }
 
-  @Roles(UserRole.director, UserRole.head_of_sales)
+  @Roles(UserRole.head_of_sales)
   @RequireEmailCode('day_off.delete')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)

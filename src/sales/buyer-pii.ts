@@ -67,3 +67,11 @@ export function assertBuyerConsentVersion(version: string): void {
     throw new BadRequestException('BUYER_CONSENT_VERSION_NOT_CURRENT');
   }
 }
+
+/** FieldCipher contexts for a reception lead (first step of the funnel). */
+export const LEAD_PII = {
+  firstName: 'Lead.firstName',
+  lastName: 'Lead.lastName',
+  phone: 'Lead.phone',
+  comment: 'Lead.comment',
+} as const;

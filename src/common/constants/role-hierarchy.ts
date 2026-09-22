@@ -7,11 +7,12 @@ import { UserRole } from '@prisma/client';
  * sales_manager, accountant, investor create nobody (empty arrays).
  */
 export const ROLE_CREATION_MATRIX: Record<UserRole, UserRole[]> = {
-  [UserRole.director]: [UserRole.head_of_sales, UserRole.accountant, UserRole.investor],
+  [UserRole.director]: [UserRole.head_of_sales, UserRole.accountant, UserRole.investor, UserRole.reception],
   [UserRole.head_of_sales]: [UserRole.sales_manager],
   [UserRole.sales_manager]: [],
   [UserRole.accountant]: [],
   [UserRole.investor]: [],
+  [UserRole.reception]: [],
 };
 
 export function canCreateRole(creatorRole: UserRole, targetRole: UserRole): boolean {

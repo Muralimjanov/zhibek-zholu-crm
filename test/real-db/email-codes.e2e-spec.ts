@@ -186,19 +186,16 @@ describe('Email codes and backups — real PostgreSQL + Mailpit', () => {
 
     it('every protected route refuses without a code (403 EMAIL_CODE_REQUIRED) and changes nothing', async () => {
       const cases: Array<[Session, 'post' | 'patch' | 'put' | 'delete' | 'get', string]> = [
-        [s.director, 'delete', `/bookings/${FAKE_ID}`],
-        [s.director, 'delete', `/contracts/${FAKE_ID}`],
+        [s.hos, 'delete', `/bookings/${FAKE_ID}`],
+        [s.hos, 'delete', `/contracts/${FAKE_ID}`],
         [s.manager, 'post', `/contracts/${FAKE_ID}/deposit`],
         [s.manager, 'put', `/contracts/${FAKE_ID}/file`],
-        [s.director, 'patch', `/shifts/${FAKE_ID}`],
-        [s.director, 'delete', `/shifts/${FAKE_ID}`],
-        [s.director, 'delete', `/day-offs/${FAKE_ID}`],
+        [s.hos, 'delete', `/day-offs/${FAKE_ID}`],
         [s.accountant, 'put', '/payroll/settings'],
         [s.accountant, 'post', `/payroll/entries/${FAKE_ID}/confirm`],
-        [s.director, 'delete', `/payroll/entries/${FAKE_ID}`],
         [s.accountant, 'post', '/transactions'],
         [s.accountant, 'patch', `/transactions/${FAKE_ID}`],
-        [s.director, 'delete', `/transactions/${FAKE_ID}`],
+        [s.accountant, 'delete', `/transactions/${FAKE_ID}`],
         [s.accountant, 'put', `/transactions/${FAKE_ID}/attachment`],
         [s.accountant, 'post', '/accounting/periods/2020-01/close'],
         [s.manager, 'post', '/users/me/email'],
@@ -223,21 +220,21 @@ describe('Email codes and backups — real PostgreSQL + Mailpit', () => {
     it('a code works once, only for its user, action and record', async () => {
       const a = await booking(s.manager);
       const b = await booking(s.manager);
-      const headers = await actionCodeHeaders(app, s.director, 'booking.delete', a);
+      const headers = await actionCodeHeaders(app, s.hos, 'booking.delete', a);
 
       // Another record, another user, another action: all rejected.
-      expect((await http().delete(`${API}/bookings/${b}`).set(...bearer(s.director)).set(headers)).body.message).toBe('EMAIL_CODE_INVALID');
-      expect((await http().delete(`${API}/bookings/${a}`).set(...bearer(s.hos)).set(headers)).body.message).toBe('EMAIL_CODE_INVALID');
-      expect((await http().delete(`${API}/contracts/${a}`).set(...bearer(s.director)).set(headers)).body.message).toBe('EMAIL_CODE_INVALID');
+      expect((await http().delete(`${API}/bookings/${b}`).set(...bearer(s.hos)).set(headers)).body.message).toBe('EMAIL_CODE_INVALID');
+      expect((await http().delete(`${API}/bookings/${a}`).set(...bearer(s.manager)).set(headers)).body.message).toBe('AUTH_FORBIDDEN');
+      expect((await http().delete(`${API}/contracts/${a}`).set(...bearer(s.hos)).set(headers)).body.message).toBe('EMAIL_CODE_INVALID');
       expect(await prisma.booking.count()).toBe(2);
 
       const wrongCode = { ...headers, 'x-confirmation-code': 'AAAAAAAA' };
-      expect((await http().delete(`${API}/bookings/${a}`).set(...bearer(s.director)).set(wrongCode)).status).toBe(401);
+      expect((await http().delete(`${API}/bookings/${a}`).set(...bearer(s.hos)).set(wrongCode)).status).toBe(401);
 
-      await http().delete(`${API}/bookings/${a}`).set(...bearer(s.director)).set(headers).expect(204);
+      await http().delete(`${API}/bookings/${a}`).set(...bearer(s.hos)).set(headers).expect(204);
       expect(await prisma.booking.findUnique({ where: { id: a } })).toBeNull();
 
-      const replay = await http().delete(`${API}/bookings/${b}`).set(...bearer(s.director)).set(headers);
+      const replay = await http().delete(`${API}/bookings/${b}`).set(...bearer(s.hos)).set(headers);
       expect(replay.status).toBe(401);
       expect(await prisma.booking.count()).toBe(1);
     });

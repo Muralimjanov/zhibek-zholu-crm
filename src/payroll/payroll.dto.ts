@@ -49,3 +49,10 @@ export class ListPayrollQueryDto {
   @IsIn(Object.values(PayrollEntryStatus))
   status?: PayrollEntryStatus;
 }
+
+/** Период для сводки по зарплате в отчётности директора. */
+export class PayrollSummaryQueryDto {
+  @IsString()
+  @Matches(PERIOD_PATTERN, { message: 'period must be YYYY-MM' })
+  period!: string;
+}

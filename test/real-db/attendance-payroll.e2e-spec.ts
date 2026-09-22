@@ -97,23 +97,19 @@ describe('Attendance, reports and payroll — real PostgreSQL', () => {
       expect((await http().get(`${API}/shifts`).set(...bearer(s.investor))).status).toBe(403);
     });
 
-    it('only the director may correct or delete a shift', async () => {
+    it('записи смен неизменны: править и удалять смену не может никто', async () => {
       await missed.recordMissedFor(lastWorkingDay());
       const missedShift = await prisma.shift.findFirstOrThrow({ where: { userId: sm1.id, status: ShiftStatus.missed } });
 
-      expect((await http().patch(`${API}/shifts/${missedShift.id}`).set(...bearer(s.hos)).send({ status: 'missed' })).status).toBe(403);
-      const opened = new Date(Date.now() - 3600_000).toISOString();
-      const corrected = await http()
-        .patch(`${API}/shifts/${missedShift.id}`)
-        .set(...bearer(s.director))
-        .send({ status: 'closed', openedAt: opened, closedAt: new Date().toISOString() });
-      expect(corrected.status).toBe(200);
-      expect(corrected.body.status).toBe('closed');
-      const invalid = await http()
-        .patch(`${API}/shifts/${missedShift.id}`)
-        .set(...bearer(s.director))
-        .send({ status: 'closed', openedAt: new Date().toISOString(), closedAt: opened });
-      expect(invalid.status).toBe(400);
+      // Правка и удаление были только у директора и убраны из API целиком
+      // (решение владельца 22.09.2026), поэтому маршрутов больше нет.
+      for (const session of [s.director, s.hos, s.sm1, s.accountant]) {
+        expect((await http().patch(`${API}/shifts/${missedShift.id}`).set(...bearer(session)).send({ status: 'closed' })).status).toBe(404);
+        expect((await http().delete(`${API}/shifts/${missedShift.id}`).set(...bearer(session))).status).toBe(404);
+      }
+      // Запись осталась нетронутой.
+      const after = await prisma.shift.findUniqueOrThrow({ where: { id: missedShift.id } });
+      expect(after.status).toBe(ShiftStatus.missed);
     });
   });
 
@@ -170,8 +166,10 @@ describe('Attendance, reports and payroll — real PostgreSQL', () => {
       const past = await http().post(`${API}/day-offs`).set(...bearer(s.hos)).send({ userId: sm1.id, date: day });
       expect(past.status).toBe(400);
       expect(past.body.message).toBe('DAY_OFF_DATE_IN_PAST');
+      // Выходные теперь заводит только начальник продаж: у директора
+      // редактирования не осталось (решение владельца 22.09.2026).
       const pastDirector = await http().post(`${API}/day-offs`).set(...bearer(s.director)).send({ userId: sm1.id, date: day });
-      expect(pastDirector.status).toBe(400);
+      expect(pastDirector.status).toBe(403);
 
       // Today, after the shift was already opened, is also refused.
       await http().post(`${API}/shifts/open`).set(...bearer(s.sm2)).expect(201);
@@ -200,7 +198,7 @@ describe('Attendance, reports and payroll — real PostgreSQL', () => {
         })
         .expect(201);
       await http().post(`${API}/shifts/open`).set(...bearer(s.sm1)).expect(201);
-      await http().post(`${API}/day-offs`).set(...bearer(s.director)).send({ userId: sm2.id, date: calendar.today() }).expect(201);
+      await http().post(`${API}/day-offs`).set(...bearer(s.hos)).send({ userId: sm2.id, date: calendar.today() }).expect(201);
       await http().post(`${API}/shifts/open`).set(...bearer(s.hos)).expect(201);
 
       const closed = await http().post(`${API}/shifts/close`).set(...bearer(s.hos));
@@ -332,8 +330,18 @@ describe('Attendance, reports and payroll — real PostgreSQL', () => {
       }
       expect((await http().put(`${API}/payroll/settings`).set(...bearer(s.director)).send({ finePerMissedShiftTyiyn: '1', taxRatePercent: '1' })).status).toBe(403);
       expect((await http().get(`${API}/payroll/entries`).set(...bearer(s.director))).body).toHaveLength(6);
-      expect((await http().delete(`${API}/payroll/entries/${other.id}`).set(...bearer(s.accountant))).status).toBe(403);
-      expect((await http().delete(`${API}/payroll/entries/${other.id}`).set(...bearer(s.director))).status).toBe(204);
+      // Удаление начисления убрано из API целиком.
+      expect((await http().delete(`${API}/payroll/entries/${other.id}`).set(...bearer(s.accountant))).status).toBe(404);
+      expect((await http().delete(`${API}/payroll/entries/${other.id}`).set(...bearer(s.director))).status).toBe(404);
+
+      // Сводка по зарплате в отчётности — только директору.
+      const summary = await http().get(`${API}/payroll/summary?period=${period()}`).set(...bearer(s.director));
+      expect(summary.status).toBe(200);
+      expect(summary.body.employeeCount).toBe(6);
+      expect(summary.body.entries).toHaveLength(6);
+      for (const session of [s.accountant, s.hos, s.sm1, s.investor]) {
+        expect((await http().get(`${API}/payroll/summary?period=${period()}`).set(...bearer(session))).status).toBe(403);
+      }
 
       const future = calendar.addDays(`${period()}-01`, 40).slice(0, 7);
       expect((await http().post(`${API}/payroll/entries/generate`).set(...bearer(s.accountant)).send({ period: future })).status).toBe(400);

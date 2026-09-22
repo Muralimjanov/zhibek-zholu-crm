@@ -94,7 +94,8 @@ describe('Покрытие маршрутов Swagger — реальная Postg
   let manager: { id: string; username: string };
   let accountant: { id: string; username: string };
   let investor: { id: string; username: string };
-  let s: Record<'director' | 'hos' | 'manager' | 'accountant' | 'investor', Session>;
+  let reception: { id: string; username: string };
+  let s: Record<'director' | 'hos' | 'manager' | 'accountant' | 'investor' | 'reception', Session>;
 
   // Данные, которые создаются в одном блоке и используются в следующих.
   let contractId: string;
@@ -114,6 +115,7 @@ describe('Покрытие маршрутов Swagger — реальная Postg
     manager = await seedUser(prisma, { role: UserRole.sales_manager, teamLeadId: hos.id, createdById: hos.id });
     accountant = await seedUser(prisma, { role: UserRole.accountant, createdById: director.id });
     investor = await seedUser(prisma, { role: UserRole.investor, createdById: director.id });
+    reception = await seedUser(prisma, { role: UserRole.reception, createdById: director.id });
 
     s = {
       director: await login(app, director.username),
@@ -121,6 +123,7 @@ describe('Покрытие маршрутов Swagger — реальная Postg
       manager: await login(app, manager.username),
       accountant: await login(app, accountant.username),
       investor: await login(app, investor.username),
+      reception: await login(app, reception.username),
     };
   }, 120_000);
 
@@ -361,6 +364,57 @@ describe('Покрытие маршрутов Swagger — реальная Postg
     );
   }, 90_000);
 
+  it('лиды: ресепшен регистрирует, начальник назначает, менеджер превращает в бронь', async () => {
+    const created = await call(
+      'POST /leads',
+      http()
+        .post(`${API}/leads`)
+        .set(...bearer(s.reception))
+        .send({
+          firstName: 'Бакыт',
+          lastName: 'Асанов',
+          phone: '+996 555 77-88-99',
+          desiredAreaSqm: '72.5',
+          comment: 'Звонил по объявлению',
+          ...BUYER_CONSENT,
+        }),
+      201,
+    );
+    const leadId = created.body.id;
+
+    await call('GET /leads', http().get(`${API}/leads`).set(...bearer(s.hos)), 200);
+    await call('GET /leads/{id}', http().get(`${API}/leads/${leadId}`).set(...bearer(s.hos)), 200);
+    await call(
+      'PATCH /leads/{id}/assign',
+      http()
+        .patch(`${API}/leads/${leadId}/assign`)
+        .set(...bearer(s.hos))
+        .send({ managerId: manager.id }),
+      200,
+    );
+    const converted = await call(
+      'POST /leads/{id}/convert',
+      http()
+        .post(`${API}/leads/${leadId}/convert`)
+        .set(...bearer(s.manager))
+        .send({ passportNumber: 'ID 7654321', ...BUYER_CONSENT }),
+      201,
+    );
+    expect(converted.body.bookingId).toBeTruthy();
+    expect(converted.body.lead.status).toBe('converted');
+
+    // Отказ проверяется на отдельном обращении: превращённый лид отклонить нельзя.
+    const second = await http()
+      .post(`${API}/leads`)
+      .set(...bearer(s.reception))
+      .send({ firstName: 'Айжан', lastName: 'Кадырова', phone: '+996 700 11-22-33', desiredAreaSqm: '45', ...BUYER_CONSENT });
+    await call(
+      'PATCH /leads/{id}/reject',
+      http().patch(`${API}/leads/${second.body.id}/reject`).set(...bearer(s.hos)),
+      200,
+    );
+  }, 90_000);
+
   it('договоры: чтение, правка, взнос, файл и удаление', async () => {
     await call('GET /contracts', http().get(`${API}/contracts`).set(...bearer(s.manager)), 200);
     await call('GET /contracts/{id}', http().get(`${API}/contracts/${contractId}`).set(...bearer(s.manager)), 200);
@@ -430,16 +484,6 @@ describe('Покрытие маршрутов Swagger — реальная Postg
     const list = await call('GET /shifts', http().get(`${API}/shifts`).set(...bearer(s.director)), 200);
     shiftId = list.body.items[0].id;
 
-    await call(
-      'PATCH /shifts/{id}',
-      http()
-        .patch(`${API}/shifts/${shiftId}`)
-        .set(...bearer(s.director))
-        .set(await actionCodeHeaders(app, s.director, 'shift.update', shiftId))
-        .send({ status: 'closed', openedAt: new Date().toISOString(), closedAt: new Date().toISOString() }),
-      200,
-    );
-
     const dayOff = await call(
       'POST /day-offs',
       http()
@@ -467,14 +511,10 @@ describe('Покрытие маршрутов Swagger — реальная Postg
       204,
     );
 
-    await call(
-      'DELETE /shifts/{id}',
-      http()
-        .delete(`${API}/shifts/${shiftId}`)
-        .set(...bearer(s.director))
-        .set(await actionCodeHeaders(app, s.director, 'shift.delete', shiftId)),
-      204,
-    );
+    // Правка и удаление смены из API убраны (решение владельца 22.09.2026):
+    // проверяем, что их действительно нет.
+    expect((await http().patch(`${API}/shifts/${shiftId}`).set(...bearer(s.director)).send({ status: 'closed' })).status).toBe(404);
+    expect((await http().delete(`${API}/shifts/${shiftId}`).set(...bearer(s.director))).status).toBe(404);
   }, 90_000);
 
   it('зарплата: настройки, расчёт, правка, подтверждение и удаление', async () => {
@@ -521,13 +561,16 @@ describe('Покрытие маршрутов Swagger — реальная Postg
         .set(await actionCodeHeaders(app, s.accountant, 'payroll.confirm', mine.id)),
       [200, 201],
     );
+    expect(other).toBeDefined();
+    // Удаление начисления из API убрано вместе с остальным редактированием директора.
+    expect((await http().delete(`${API}/payroll/entries/${other.id}`).set(...bearer(s.director))).status).toBe(404);
+
     await call(
-      'DELETE /payroll/entries/{id}',
+      'GET /payroll/summary',
       http()
-        .delete(`${API}/payroll/entries/${other.id}`)
-        .set(...bearer(s.director))
-        .set(await actionCodeHeaders(app, s.director, 'payroll.delete', other.id)),
-      204,
+        .get(`${API}/payroll/summary?period=${period}`)
+        .set(...bearer(s.director)),
+      200,
     );
   }, 120_000);
 
@@ -591,8 +634,8 @@ describe('Покрытие маршрутов Swagger — реальная Postg
       'DELETE /transactions/{id}',
       http()
         .delete(`${API}/transactions/${txId}`)
-        .set(...bearer(s.director))
-        .set(await actionCodeHeaders(app, s.director, 'transaction.delete', txId)),
+        .set(...bearer(s.accountant))
+        .set(await actionCodeHeaders(app, s.accountant, 'transaction.delete', txId)),
       204,
     );
 

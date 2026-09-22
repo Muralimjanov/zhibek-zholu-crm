@@ -150,27 +150,10 @@ export class ShiftsService {
   }
 
   /** Director-only correction. A head of sales cannot remove a recorded "missed" (TZ). */
-  async correct(actor: AuthenticatedUser, id: string, dto: CorrectShiftDto, ctx: RequestContext): Promise<ShiftResponse> {
-    if (actor.role !== UserRole.director) throw new ForbiddenException('AUTH_FORBIDDEN');
-    const existing = await this.prisma.shift.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('SHIFT_NOT_FOUND');
-
-    const openedAt = dto.status === ShiftStatus.missed ? null : new Date(dto.openedAt!);
-    const closedAt = dto.status === ShiftStatus.closed ? new Date(dto.closedAt!) : null;
-    if (openedAt && closedAt && closedAt < openedAt) throw new BadRequestException('CLOSED_BEFORE_OPENED');
-
-    const updated = await this.prisma.shift.update({ where: { id }, data: { status: dto.status, openedAt, closedAt } });
-    await this.auditShift(actor.id, AuditAction.SHIFT_CORRECTED, updated, ctx);
-    return toShiftResponse(updated);
-  }
-
-  async remove(actor: AuthenticatedUser, id: string, ctx: RequestContext): Promise<void> {
-    if (actor.role !== UserRole.director) throw new ForbiddenException('AUTH_FORBIDDEN');
-    const existing = await this.prisma.shift.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('SHIFT_NOT_FOUND');
-    await this.prisma.shift.delete({ where: { id } });
-    await this.auditShift(actor.id, AuditAction.SHIFT_DELETED, existing, ctx);
-  }
+  // correct() и remove() удалены 22.09.2026 вместе с эндпоинтами: правка и
+  // удаление смены были только у директора, а у него осталась лишь
+  // отчётность и создание аккаунтов. Кода, способного изменить закрытую
+  // смену, в сервисе больше нет.
 
   private auditShift(actorId: string, action: AuditAction, shift: Shift, ctx: RequestContext) {
     return this.audit.record({

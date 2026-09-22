@@ -343,11 +343,12 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
     it('role-creation matrix for every role pair: allowed -> 202; forbidden -> 403 with no PendingAction and no email', async () => {
       await seedUser(prisma, { role: UserRole.director, email: 'matrix-dir@test.local' });
       const allowed: Record<UserRole, UserRole[]> = {
-        director: [UserRole.head_of_sales, UserRole.accountant, UserRole.investor],
+        director: [UserRole.head_of_sales, UserRole.accountant, UserRole.investor, UserRole.reception],
         head_of_sales: [UserRole.sales_manager],
         sales_manager: [],
         accountant: [],
         investor: [],
+        reception: [],
       };
 
       const mailBefore = await totalMessages();
@@ -377,7 +378,8 @@ describe('Auth Foundation — real PostgreSQL + real SMTP (Mailpit)', () => {
         }
       }
 
-      expect(allowedIds).toHaveLength(4);
+      // 5 разрешённых пар: директор создаёт 4 роли (включая ресепшен), начальник продаж — менеджера.
+      expect(allowedIds).toHaveLength(5);
       for (const id of allowedIds) await waitForMessages(id);
       // One approval email per allowed request + one login code per creator.
       expect((await totalMessages()) - mailBefore).toBe(allowedIds.length + ALL_ROLES.length);

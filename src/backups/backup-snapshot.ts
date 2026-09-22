@@ -19,6 +19,8 @@ export const BACKUP_TABLES = [
   'ConsentRecord',
   'PendingAction',
   'Booking',
+  // Лид ссылается на User и на Booking, поэтому идёт после них.
+  'Lead',
   'Contract',
   'Shift',
   'DayOff',

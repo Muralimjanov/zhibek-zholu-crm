@@ -84,7 +84,7 @@ export class AccountingController {
     return this.accounting.update(actor, id, dto, ctxOf(req));
   }
 
-  @Roles(UserRole.director, UserRole.accountant)
+  @Roles(UserRole.accountant)
   @RequireEmailCode('transaction.delete')
   @Delete('transactions/:id')
   @HttpCode(HttpStatus.NO_CONTENT)

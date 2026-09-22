@@ -189,15 +189,13 @@ export class AccountingService {
     return this.toResponse(updated, new Set());
   }
 
+  /**
+   * Удаляет операцию. С 22.09.2026 право есть только у бухгалтера и только
+   * на свои записи в незакрытом месяце: решением владельца у директора
+   * забрано всякое редактирование, кроме отчётности и аккаунтов.
+   */
   async remove(actor: AuthenticatedUser, id: string, ctx: RequestContext): Promise<void> {
-    let t: Transaction;
-    if (actor.role === UserRole.director) {
-      const found = await this.prisma.transaction.findUnique({ where: { id } });
-      if (!found) throw new NotFoundException('TRANSACTION_NOT_FOUND');
-      t = found;
-    } else {
-      t = await this.findEditableByAccountant(actor, id);
-    }
+    const t = await this.findEditableByAccountant(actor, id);
     await this.prisma.transaction.delete({ where: { id } });
     await this.files.remove(t.attachmentFileId);
     await this.auditTx(actor, AuditAction.TRANSACTION_DELETED, t, ctx);

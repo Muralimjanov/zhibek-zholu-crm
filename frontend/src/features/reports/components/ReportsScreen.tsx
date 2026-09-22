@@ -23,6 +23,7 @@ import { allowedReportTypes, type ReportType } from '../access'
 import type { ReportFilters } from '../filters'
 import { formatGeneratedAt } from '../labels'
 import { useReportsQuery } from '../queries'
+import PayrollSummarySection from './PayrollSummarySection'
 import SalesAnalytics from './SalesAnalytics'
 import { reportTypeLabel } from './ReportView'
 const PAGE_SIZE = 20
@@ -106,6 +107,9 @@ export default function ReportsScreen() {
       />
 
       <SalesAnalytics />
+
+      {/* Зарплата в отчётности — только директору (решение владельца 22.09.2026). */}
+      {user.role === 'director' ? <PayrollSummarySection /> : null}
 
       <section className={SECTION_CLASS}>
         <h2 className="font-semibold text-zinc-900 dark:text-zinc-50">

@@ -6,7 +6,13 @@
  */
 
 export type KnownUserRole =
-  'director' | 'head_of_sales' | 'sales_manager' | 'accountant' | 'investor'
+  | 'director'
+  | 'head_of_sales'
+  | 'sales_manager'
+  | 'accountant'
+  | 'investor'
+  /** Ресепшен: регистрирует обращения, больше в CRM ничего не видит (API 0.4.0). */
+  | 'reception'
 
 export type UserRole = KnownUserRole | (string & Record<never, never>)
 

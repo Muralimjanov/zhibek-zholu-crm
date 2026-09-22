@@ -6,11 +6,14 @@ import {
   ClockIcon,
   FileTextIcon,
   HouseIcon,
+  PhoneIcon,
   UserCircleIcon,
+  UserPlusIcon,
   UsersThreeIcon,
   WalletIcon,
 } from '@phosphor-icons/react/dist/ssr'
 import { canViewBookings } from '@/features/bookings/access'
+import { canCreateLead, canViewLeadsSection } from '@/features/leads/access'
 import { canViewContracts } from '@/features/contracts/access'
 import { canViewFinanceSection } from '@/features/finance/access'
 import { canViewPayrollSection } from '@/features/payroll/access'
@@ -48,6 +51,14 @@ export function buildNavGroups(role: UserRole | null): NavGroup[] {
   const finance: NavItem[] = []
   const analytics: NavItem[] = []
   const admin: NavItem[] = []
+
+  if (canCreateLead(role)) {
+    operations.push({ href: '/reception', label: 'Приём обращений', icon: PhoneIcon })
+  }
+
+  if (canViewLeadsSection(role)) {
+    operations.push({ href: '/leads', label: 'Лиды', icon: UserPlusIcon })
+  }
 
   if (canViewBookings(role)) {
     operations.push({

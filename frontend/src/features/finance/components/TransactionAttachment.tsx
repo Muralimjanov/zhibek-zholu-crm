@@ -1,6 +1,7 @@
 'use client'
 
-import { useId, useRef, useState, type ChangeEvent } from 'react'
+import { useId, useState } from 'react'
+import DocumentPicker from '@/components/ui/DocumentPicker'
 import { describeConfirmationError } from '@/features/auth/error-messages'
 import { useEmailCodeConfirm } from '@/features/auth/useEmailCodeConfirm'
 import {
@@ -64,7 +65,6 @@ export function TransactionAttachment({
   disabled: boolean
 }) {
   const codeId = useId()
-  const inputRef = useRef<HTMLInputElement>(null)
   const [downloadPending, setDownloadPending] = useState<DownloadPending>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -73,16 +73,7 @@ export function TransactionAttachment({
   const [submitError, setSubmitError] = useState<string | null>(null)
   const challenge = useEmailCodeConfirm('transaction.attachment', transactionId)
 
-  const handleSelect = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-
-    // Сбрасываем input сразу, иначе повторный выбор того же файла не сработает.
-    event.target.value = ''
-
-    if (!file) {
-      return
-    }
-
+  const handleSelect = (file: File) => {
     setSelectionError(null)
 
     const validationError = validateTransactionAttachment(file)
@@ -184,38 +175,22 @@ export function TransactionAttachment({
           </button>
         ) : null}
 
-        {canUpload && !selectedFile ? (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => {
-              inputRef.current?.click()
-            }}
-            className={SECONDARY_BUTTON_CLASS}
-          >
-            {hasAttachment === true ? 'Заменить файл' : 'Загрузить файл'}
-          </button>
-        ) : null}
       </div>
 
-      {canUpload ? (
-        <>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={TRANSACTION_ATTACHMENT_MIME_TYPES.join(',')}
-            className="sr-only"
-            tabIndex={-1}
-            aria-hidden="true"
-            onChange={handleSelect}
-          />
-          {!selectedFile ? (
+      {canUpload && !selectedFile ? (
+        <DocumentPicker
+          accept={TRANSACTION_ATTACHMENT_MIME_TYPES.join(',')}
+          chooseLabel={hasAttachment === true ? 'Заменить файл' : 'Загрузить файл'}
+          onSelect={handleSelect}
+          disabled={disabled}
+          buttonClassName={SECONDARY_BUTTON_CLASS}
+          hint={
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              PDF, JPEG или PNG, не больше 10 МБ. Перед загрузкой сервер пришлёт
-              код на почту.
+              PDF, JPEG или PNG, не больше 10 МБ. Чек можно сфотографировать
+              телефоном. Перед загрузкой сервер пришлёт код на почту.
             </p>
-          ) : null}
-        </>
+          }
+        />
       ) : null}
 
       {selectionError ? (

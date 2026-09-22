@@ -1,6 +1,7 @@
 'use client'
 
-import { useId, useRef, useState, type ChangeEvent } from 'react'
+import { useId, useState } from 'react'
+import DocumentPicker from '@/components/ui/DocumentPicker'
 import { describeConfirmationError } from '@/features/auth/error-messages'
 import { useEmailCodeConfirm } from '@/features/auth/useEmailCodeConfirm'
 import {
@@ -47,7 +48,6 @@ export function ContractFile({
   canManage: boolean
 }) {
   const codeId = useId()
-  const inputRef = useRef<HTMLInputElement>(null)
   const [downloadPending, setDownloadPending] = useState<DownloadPending>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -57,16 +57,7 @@ export function ContractFile({
   const challenge = useEmailCodeConfirm('contract.file', contractId)
   const uploadMutation = useUploadContractFile(contractId)
 
-  const handleSelect = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-
-    // Сбрасываем input сразу, иначе повторный выбор того же файла не сработает.
-    event.target.value = ''
-
-    if (!file) {
-      return
-    }
-
+  const handleSelect = (file: File) => {
     setSelectionError(null)
 
     const validationError = validateContractFile(file)
@@ -162,37 +153,23 @@ export function ContractFile({
           </button>
         ) : null}
 
-        {canManage && !selectedFile ? (
-          <button
-            type="button"
-            onClick={() => {
-              inputRef.current?.click()
-            }}
-            className={SECONDARY_BUTTON_CLASS}
-          >
-            {hasFile ? 'Заменить файл' : 'Загрузить подписанный файл'}
-          </button>
-        ) : null}
       </div>
 
-      {canManage ? (
-        <>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="application/pdf,image/jpeg,image/png"
-            className="sr-only"
-            tabIndex={-1}
-            aria-hidden="true"
-            onChange={handleSelect}
-          />
-          {!selectedFile ? (
+      {canManage && !selectedFile ? (
+        <DocumentPicker
+          accept="application/pdf,image/jpeg,image/png"
+          chooseLabel={hasFile ? 'Заменить файл' : 'Загрузить подписанный файл'}
+          onSelect={handleSelect}
+          buttonClassName={SECONDARY_BUTTON_CLASS}
+          hint={
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              PDF, JPEG или PNG, не больше 10 МБ. Перед загрузкой сервер пришлёт
-              код на почту. Загрузка переводит договор в статус «Подписан».
+              PDF, JPEG или PNG, не больше 10 МБ. С телефона можно
+              сфотографировать подписанный договор. Перед загрузкой сервер
+              пришлёт код на почту. Загрузка переводит договор в статус
+              «Подписан».
             </p>
-          ) : null}
-        </>
+          }
+        />
       ) : null}
 
       {selectionError ? (

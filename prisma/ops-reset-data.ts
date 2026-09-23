@@ -108,18 +108,9 @@ export async function resetData(prisma: PrismaClient, storageDir: string): Promi
 
   await prisma.$transaction(
     async (tx) => {
-      // 1. Снимаем ссылки, которые иначе не дадут удалить строки.
-      await tx.transaction.updateMany({ data: { relatedContractId: null, attachmentFileId: null } });
-      await tx.contract.updateMany({ data: { contractFileId: null } });
-      await tx.lead.updateMany({ data: { bookingId: null, status: 'new' } });
-      await tx.dailyReport.updateMany({ data: { sourceShiftId: null } });
-      await tx.user.updateMany({ where: { avatarFileId: { notIn: keepFileIds } }, data: { avatarFileId: null } });
-      // Ссылки «кто создал» и «чья команда» ведут на сотрудников, которых не станет.
-      await tx.user.updateMany({ data: { createdById: null, teamLeadId: null } });
-      await tx.auditEvent.updateMany({ where: { actorUserId: { notIn: directorIds } }, data: { actorUserId: null } });
-      await tx.pendingAction.updateMany({ data: { confirmedByUserId: null, rejectedByUserId: null } });
-
-      // 2. Рабочие записи.
+      // Порядок строго от зависимых записей к тем, на кого они ссылаются.
+      // Обнулять ссылки заранее нельзя: у подписанного договора проверка в
+      // базе требует и взнос, и файл, поэтому снятый файл её нарушает.
       count('лидов', (await tx.lead.deleteMany({})).count);
       count('операций бухгалтерии', (await tx.transaction.deleteMany({})).count);
       count('закрытых месяцев', (await tx.accountingPeriod.deleteMany({})).count);
@@ -131,9 +122,15 @@ export async function resetData(prisma: PrismaClient, storageDir: string): Promi
       count('договоров', (await tx.contract.deleteMany({})).count);
       count('броней', (await tx.booking.deleteMany({})).count);
       count('запросов на подтверждение', (await tx.pendingAction.deleteMany({})).count);
+
+      // Аватары директоров остаются, остальные файлы уже никто не держит.
+      await tx.user.updateMany({ where: { avatarFileId: { notIn: keepFileIds } }, data: { avatarFileId: null } });
       count('файлов', (await tx.storedFile.deleteMany({ where: { id: { notIn: keepFileIds } } })).count);
 
-      // 3. Сотрудники. Согласия и сессии директоров остаются нетронутыми.
+      // Сотрудники. Согласия и сессии директоров не трогаем.
+      // Ссылки «кто создал» и «чья команда» ведут на тех, кого не станет.
+      await tx.user.updateMany({ data: { createdById: null, teamLeadId: null } });
+      await tx.auditEvent.updateMany({ where: { actorUserId: { notIn: directorIds } }, data: { actorUserId: null } });
       count('согласий сотрудников', (await tx.consentRecord.deleteMany({ where: { userId: { notIn: directorIds } } })).count);
       count('сессий сотрудников', (await tx.refreshToken.deleteMany({ where: { userId: { notIn: directorIds } } })).count);
       count('кодов из писем', (await tx.emailCode.deleteMany({})).count);

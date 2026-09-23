@@ -71,6 +71,47 @@ describe('Полная очистка рабочих данных — реаль
         buyerConsentRecordedById: reception.id,
       },
     });
+    // Подписанный договор с прикреплённым файлом: в базе есть проверка
+    // «signed требует и взнос, и файл», из-за которой очистка ломалась,
+    // если снимать ссылку на файл до удаления самого договора.
+    const file = await prisma.storedFile.create({
+      data: {
+        purpose: 'contract_document',
+        storageKey: 'a'.repeat(64),
+        mimeType: 'application/pdf',
+        sizeBytes: 1024,
+        sha256: 'b'.repeat(64),
+        keyVersion: 'v1',
+        iv: 'iv',
+        authTag: 'tag',
+        uploadedById: manager.id,
+      },
+    });
+    await prisma.contract.create({
+      data: {
+        bookingId: booking.id,
+        fullNameEnc: cipher.encrypt('Contract.fullName', 'Асанов Бакыт'),
+        passportNumberEnc: cipher.encrypt('Contract.passportNumber', 'ID 1234567'),
+        passportNumberIdx: 'idx-c-passport',
+        addressEnc: cipher.encrypt('Contract.address', 'г. Ош'),
+        phoneEnc: cipher.encrypt('Contract.phone', '+996555000000'),
+        phoneIdx: 'idx-c-phone',
+        areaSqm: '60',
+        pricePerSqmTyiyn: 5000000n,
+        totalAmountTyiyn: 300000000n,
+        depositAmountTyiyn: 90000000n,
+        depositPaid: true,
+        depositPaidAt: new Date(),
+        depositMarkedById: manager.id,
+        contractFileId: file.id,
+        status: 'signed',
+        managerId: manager.id,
+        buyerConsentVersion: LEGAL_DOCUMENTS.buyer_personal_data_consent.version,
+        buyerConsentConfirmedAt: new Date(),
+        buyerConsentRecordedById: manager.id,
+      },
+    });
+
     await prisma.payrollSettings.create({
       data: { id: 1, finePerMissedShiftTyiyn: 100000n, taxRatePercent: '10', updatedById: director.id },
     });
@@ -92,12 +133,16 @@ describe('Полная очистка рабочих данных — реаль
     expect(removed['сотрудников']).toBe(3);
     expect(removed['лидов']).toBe(1);
     expect(removed['броней']).toBe(1);
+    expect(removed['договоров']).toBe(1);
+    expect(removed['файлов']).toBe(1);
 
     const after = await countEverything(prisma);
     expect(after['директоров (остаются)']).toBe(1);
     expect(after['остальных сотрудников']).toBe(0);
     expect(after['лидов']).toBe(0);
     expect(after['броней']).toBe(0);
+    expect(after['договоров']).toBe(0);
+    expect(after['файлов']).toBe(0);
     expect(after['ежедневных отчётов']).toBe(0);
     expect(after['настроек зарплаты']).toBe(0);
     // Журнал аудита цел, но ссылка на удалённого менеджера обнулена.

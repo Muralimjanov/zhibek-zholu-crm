@@ -108,6 +108,7 @@ export async function collectTargets(prisma: PrismaClient, opts: Options): Promi
         payrollEntries: await prisma.payrollEntry.count({ where: { userId: u.id } }),
         transactions: await prisma.transaction.count({ where: { createdById: u.id } }),
         files: await prisma.storedFile.count({ where: { uploadedById: u.id } }),
+        leads: await prisma.lead.count({ where: { createdById: u.id } }),
       },
     })),
   );
@@ -128,6 +129,13 @@ export async function deleteUsers(prisma: PrismaClient, ids: string[], storageDi
     const contractIds = contracts.map((c) => c.id);
     const fileIds = (await tx.storedFile.findMany({ where: { uploadedById: { in: ids } }, select: { id: true } })).map((f) => f.id);
 
+    // Лиды: назначение на удаляемого менеджера снимается, а записи,
+    // заведённые удаляемым сотрудником, уходят вместе с ним (createdById
+    // не обнуляется — без автора лид теряет смысл).
+    await tx.lead.updateMany({ where: { assignedManagerId: { in: ids } }, data: { assignedManagerId: null } });
+    const bookingIds = (await tx.booking.findMany({ where: { managerId: { in: ids } }, select: { id: true } })).map((b) => b.id);
+    await tx.lead.updateMany({ where: { bookingId: { in: bookingIds } }, data: { bookingId: null, status: 'new' } });
+
     // Break references so the rows below can go.
     await tx.transaction.updateMany({ where: { relatedContractId: { in: contractIds } }, data: { relatedContractId: null } });
     await tx.transaction.updateMany({ where: { attachmentFileId: { in: fileIds } }, data: { attachmentFileId: null } });
@@ -138,6 +146,7 @@ export async function deleteUsers(prisma: PrismaClient, ids: string[], storageDi
     await tx.user.updateMany({ where: { teamLeadId: { in: ids }, id: { notIn: ids } }, data: { teamLeadId: null } });
     await tx.auditEvent.updateMany({ where: { actorUserId: { in: ids } }, data: { actorUserId: null } });
 
+    count('leads', (await tx.lead.deleteMany({ where: { createdById: { in: ids } } })).count);
     count('transactions', (await tx.transaction.deleteMany({ where: { createdById: { in: ids } } })).count);
     count('payrollEntries', (await tx.payrollEntry.deleteMany({ where: { userId: { in: ids } } })).count);
     count('dayOffs', (await tx.dayOff.deleteMany({ where: { OR: [{ userId: { in: ids } }, { approvedById: { in: ids } }] } })).count);

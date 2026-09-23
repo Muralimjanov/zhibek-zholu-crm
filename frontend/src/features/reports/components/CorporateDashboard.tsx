@@ -360,9 +360,11 @@ export function CorporateDashboard({ role }: { role: UserRole }) {
             <h3 id="recent-reports-heading" className="font-semibold">
               Последние ежедневные отчёты
             </h3>
+            {/* На телефоне ссылка-действие должна нажиматься пальцем: 44px
+                по высоте — минимум из дизайн-контракта. */}
             <Link
               href="/reports"
-              className="text-sm font-medium text-brand-700 underline underline-offset-4 dark:text-brand-300"
+              className="-my-2 inline-flex min-h-11 items-center py-2 text-sm font-medium text-brand-700 underline underline-offset-4 dark:text-brand-300"
             >
               Все отчёты
             </Link>
@@ -401,7 +403,7 @@ export function CorporateDashboard({ role }: { role: UserRole }) {
                   <li key={report.id} className="py-2.5">
                     <Link
                       href={`/reports/${encodeURIComponent(report.id)}`}
-                      className="font-medium text-brand-700 underline underline-offset-4 dark:text-brand-300"
+                      className="inline-flex min-h-11 items-center font-medium text-brand-700 underline underline-offset-4 dark:text-brand-300"
                     >
                       {reportTypeLabel(report.type)} · {report.date}
                     </Link>

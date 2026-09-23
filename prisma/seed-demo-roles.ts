@@ -32,6 +32,7 @@ const PEOPLE: Person[] = [
   { username: 'demo_manager', fullName: 'Менеджеров Менеджер', role: UserRole.sales_manager },
   { username: 'demo_accountant', fullName: 'Бухгалтеров Бухгалтер', role: UserRole.accountant },
   { username: 'demo_reception', fullName: 'Ресепшенова Ресепшен', role: UserRole.reception },
+  { username: 'demo_investor', fullName: 'Инвесторов Инвестор', role: UserRole.investor },
 ];
 
 async function main() {

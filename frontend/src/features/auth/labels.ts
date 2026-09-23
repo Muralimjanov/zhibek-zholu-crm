@@ -6,6 +6,7 @@ const ROLE_LABELS: Record<string, string> = {
   sales_manager: 'Менеджер',
   accountant: 'Бухгалтер',
   investor: 'Инвестор',
+  reception: 'Ресепшен',
 }
 
 /** Перечисление ролей не опубликовано в OpenAPI: неизвестное значение показываем как есть. */
